@@ -320,8 +320,8 @@ github.com/cespare/xxhash/v2 v2.1.1/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XL
 github.com/cespare/xxhash/v2 v2.1.2/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/cespare/xxhash/v2 v2.2.0 h1:DC2CZ1Ep5Y4k3ZQ899DldepgrayRUGE6BBZ/cd9Cj44=
 github.com/cespare/xxhash/v2 v2.2.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
-github.com/chebyrash/promise v0.0.0-20220530143319-1123826567d6 h1:AtcTeZIfucJjiqhIeMoOAR292ti2QOyo2aqN3SoWopo=
-github.com/chebyrash/promise v0.0.0-20220530143319-1123826567d6/go.mod h1:4DRxP3p0R7/5msq1uKcI1THYmfWgFXxQqr0DutaIAEk=
+github.com/chebyrash/promise v0.0.0-20230414144155-dd8f641675f4 h1:UgduI3q9y7ShLNoZacVZqFFR8CJAzv7CqFOpwvFIxBc=
+github.com/chebyrash/promise v0.0.0-20230414144155-dd8f641675f4/go.mod h1:f0Wnnt1WnX1xY9NnS4856Rsww/8Emacybw7kwbLEfHc=
 github.com/chenzhuoyu/iasm v0.0.0-20230222070914-0b1b64b0e762 h1:4+00EOUb1t9uxAbgY8VvgfKJKDpim3co4MqsAbelIbs=
 github.com/chenzhuoyu/iasm v0.0.0-20230222070914-0b1b64b0e762/go.mod h1:Xjy2NpN3h7aUqeqM+woSuuvxmIe6+DDsiNLIrkAmYog=
 github.com/choleraehyq/pid v0.0.16 h1:1/714sMH9IBlE/aK6xM0acTagGKSzpiR0bDt7l0cG7o=
@@ -399,8 +399,6 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.11.0-rc.11 h1:PFUTCCfZ+99BIorCNR+mB/CEGnGFNMbI0OhQQ9pbq3E=
-github.com/dapr/components-contrib v1.11.0-rc.11/go.mod h1:prx2ATX6wFnR6Cp1xXGW3J9s5Gyz9AtOrG0xBf7QnHI=
 github.com/dapr/kit v0.11.2 h1:4tJre4OWyOfBFDZeDvEIC+7nYgTRgqpCvo4/bfB2sN8=
 github.com/dapr/kit v0.11.2/go.mod h1:Iq5mKuZnmO+Lyu7MC8755YWv+mp3h7/nomRQcjZfN5k=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
@@ -424,6 +422,8 @@ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cu
 github.com/dgryski/go-sip13 v0.0.0-20181026042036-e10d5fee7954/go.mod h1:vAd38F8PWV+bWy6jNmig1y/TA+kYO4g3RSRF0IAv0no=
 github.com/dgryski/trifles v0.0.0-20200323201526-dd97f9abfb48 h1:fRzb/w+pyskVMQ+UbP35JkH8yB7MYb4q/qhBarqZE6g=
 github.com/dgryski/trifles v0.0.0-20200323201526-dd97f9abfb48/go.mod h1:if7Fbed8SFyPtHLHbg49SI7NAdJiC5WIA09pe59rfAA=
+github.com/diagridio/dapr-components-contrib v1.11.0-cra-2 h1:abU+AbiBt3GIan0A0s9aQVIfRfomQOf3wX46zfOD9ds=
+github.com/diagridio/dapr-components-contrib v1.11.0-cra-2/go.mod h1:hAZ+XJD8qWEz9+lXvxRS1QrWijIEC1XpNkSbQHJKung=
 github.com/didip/tollbooth/v7 v7.0.1 h1:TkT4sBKoQoHQFPf7blQ54iHrZiTDnr8TceU+MulVAog=
 github.com/didip/tollbooth/v7 v7.0.1/go.mod h1:VZhDSGl5bDSPj4wPsih3PFa4Uh9Ghv8hgacaTm5PRT4=
 github.com/dimfeld/httptreemux v5.0.1+incompatible h1:Qj3gVcDNoOthBAqftuD596rm4wg/adLLz5xh5CmpiCA=

@@ -8,7 +8,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
-	github.com/dapr/components-contrib v1.11.0-rc.11
+	github.com/dapr/components-contrib v1.11.0-cra-2
 	github.com/dapr/kit v0.11.2
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/fasthttp/router v1.4.18
@@ -152,7 +152,7 @@ require (
 	github.com/camunda/zeebe/clients/go/v8 v8.1.8 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/chebyrash/promise v0.0.0-20220530143319-1123826567d6 // indirect
+	github.com/chebyrash/promise v0.0.0-20230414144155-dd8f641675f4 // indirect
 	github.com/chenzhuoyu/iasm v0.0.0-20230222070914-0b1b64b0e762 // indirect
 	github.com/choleraehyq/pid v0.0.16 // indirect
 	github.com/clbanning/mxj/v2 v2.5.6 // indirect
@@ -430,6 +430,8 @@ replace (
 	github.com/toolkits/concurrent => github.com/niean/gotools v0.0.0-20151221085310-ff3f51fc5c60
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 )
+
+replace github.com/dapr/components-contrib => github.com/diagridio/dapr-components-contrib v1.11.0-cra-2
 
 // TODO: Remove this when upgrading the library to 2.0.10 or higher
 replace github.com/lestrrat-go/jwx/v2 => github.com/lestrrat-go/jwx/v2 v2.0.9-0.20230526134723-5f998ac6c826
