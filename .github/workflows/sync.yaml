@@ -9,6 +9,7 @@ env:
   MERGE_ARGS: ""
   PUSH_ARGS: ""
   SPAWN_LOGS: "true"
+  GITHUB_REPOSITORY: "dapr/dapr"
 
 # This runs every day on 1801 UTC
 on:
@@ -22,7 +23,7 @@ jobs:
     steps:
       - name: Sync Upstream
         uses: dabreadman/sync-upstream-repo@v1.3.0
-        with: 
+        with:
           upstream_repo: ${{ env.UPSTREAM_URL }}
           upstream_branch: ${{ env.UPSTREAM_BRANCH }}
           downstream_branch: ${{ env.DOWNSTREAM_BRANCH }}
