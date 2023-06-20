@@ -13,6 +13,8 @@ jobs:
     steps:
     - name: Checkout target repo
       uses: actions/checkout@v3
+      with:
+        ref: upstream
 
     - name: Sync upstream changes
       id: sync
