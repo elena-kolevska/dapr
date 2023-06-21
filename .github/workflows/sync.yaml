@@ -42,14 +42,14 @@ jobs:
         application_id: ${{ secrets.DIAGRID_BOT_APPLICATION_ID }}
         application_private_key: ${{ secrets.DIAGRID_BOT_APPLICATION_PRIVATE_KEY }}
 
-    - name: Create Pull Request
-      if : steps.sync.outputs.has_new_commits == 'true'
-      uses: peter-evans/create-pull-request@v4
-      with:
-        commit-message: dapr upstream sync
-        title: Dapr Upstream Sync
-        body: Merging upstream dapr changes into master
-        base: master
-        branch: upstream
-        token: ${{ steps.get_workflow_token.outputs.token }}
-        labels: upstream-merge,automerge # TODO: Add PR checks and automerge
+    # - name: Create Pull Request
+    #   if : steps.sync.outputs.has_new_commits == 'true'
+    #   uses: peter-evans/create-pull-request@v4
+    #   with:
+    #     commit-message: dapr upstream sync
+    #     title: Dapr Upstream Sync
+    #     body: Merging upstream dapr changes into master
+    #     base: master
+    #     branch: upstream
+    #     token: ${{ steps.get_workflow_token.outputs.token }}
+    #     labels: upstream-merge,automerge # TODO: Add PR checks and automerge
