@@ -35,14 +35,6 @@ jobs:
       if: steps.sync.outputs.has_new_commits == 'false'
       run: echo "There were no new commits."
 
-    - name: Get workflow token
-      if : steps.sync.outputs.has_new_commits == 'true'
-      id: get_workflow_token
-      uses: peter-murray/workflow-application-token-action@v2
-      with:
-        application_id: ${{ secrets.DIAGRID_BOT_APPLICATION_ID }}
-        application_private_key: ${{ secrets.DIAGRID_BOT_APPLICATION_PRIVATE_KEY }}
-
     - name: Create pull request
       env:
         GH_TOKEN: ${{ github.token }}
