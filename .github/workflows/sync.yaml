@@ -33,9 +33,6 @@ jobs:
     - name: No new commits
       if: steps.sync.outputs.has_new_commits == 'false'
       run: echo "There were no new commits."
-      
-    - name: Show value of 'has_new_commits'
-      run: echo ${{ steps.sync.outputs.has_new_commits }}
 
     - name: Get Workflow Token
       if : steps.sync.outputs.has_new_commits == 'true'
@@ -45,16 +42,14 @@ jobs:
         application_id: ${{ secrets.DIAGRID_BOT_APPLICATION_ID }}
         application_private_key: ${{ secrets.DIAGRID_BOT_APPLICATION_PRIVATE_KEY }}
 
-
     - name: Create Pull Request
       if : steps.sync.outputs.has_new_commits == 'true'
       uses: peter-evans/create-pull-request@v4
       with:
         commit-message: dapr upstream sync
-        title: Automated - Dapr Upstream Sync
-        body: Merging upstream changes into master
+        title: Dapr Upstream Sync
+        body: Merging upstream dapr changes into master
         base: master
         branch: upstream
-        delete-branch: true
         token: ${{ steps.get_workflow_token.outputs.token }}
         labels: upstream-merge,automerge # TODO: Add PR checks and automerge
