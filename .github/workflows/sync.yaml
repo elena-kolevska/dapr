@@ -2,7 +2,7 @@ name: 'dapr sync'
 
 on:
   schedule:
-    - cron:  '0 7 * * 1,5' # scheduled at 07:00 every Monday and Friday
+    - cron: '0 */2 * * *' # run every 2 hours
   workflow_dispatch:
 
 jobs:
