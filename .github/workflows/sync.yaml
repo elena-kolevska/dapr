@@ -47,4 +47,7 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        gh pr create --title "Dapr upstream sync" --body "Sync master from Dapr upstream" -B master -l automerge
+        gh pr create \
+          --title "Dapr upstream sync" \
+          --body "Sync master from Dapr upstream" \
+          -B master -l automerge -R diagridio/dapr-dapr
