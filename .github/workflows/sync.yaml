@@ -42,4 +42,5 @@ jobs:
         gh pr create \
           --title "Dapr upstream sync" \
           --body "Sync master from Dapr upstream" \
-          -B master -l automerge -R diagridio/dapr-dapr
+          -B master -l automerge -R diagridio/dapr-dapr \
+          || true
