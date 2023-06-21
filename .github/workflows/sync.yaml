@@ -44,6 +44,6 @@ jobs:
 
     - name: Create pull request
       env:
-        GH_TOKEN: ${{ github.token }}
+        GH_TOKEN: ${{ secrets.SYNC_PAT }}
       run: |
         gh pr create --title "Dapr upstream sync" --body "Sync master from Dapr upstream" -B master -l automerge
