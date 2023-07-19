@@ -191,6 +191,9 @@ type DaprRuntime struct {
 	tracerProvider *sdktrace.TracerProvider
 
 	workflowEngine *wfengine.WorkflowEngine
+
+	// diagrid custom
+	customMiddlewareProvider func() (gogrpc.UnaryServerInterceptor, gogrpc.StreamServerInterceptor)
 }
 
 type componentPreprocessRes struct {
@@ -260,6 +263,14 @@ func newDaprRuntime(runtimeConfig *internalConfig, globalConfig *config.Configur
 	rt.initAppHTTPClient()
 
 	return rt
+}
+
+func (a *DaprRuntime) GetGlobalConfig() *config.Configuration {
+	return a.globalConfig
+}
+
+func (a *DaprRuntime) SetCustomGRPCMiddlewareProvider(c func() (gogrpc.UnaryServerInterceptor, gogrpc.StreamServerInterceptor)) {
+	a.customMiddlewareProvider = c
 }
 
 // Run performs initialization of the runtime with the runtime and global configurations.
@@ -1528,6 +1539,7 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(a.runtimeConfig.apiListenAddresses, port)
 	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.GetTracingSpec(), a.globalConfig.GetMetricsSpec(), a.globalConfig.GetAPISpec(), a.proxy, a.workflowEngine)
+	server.SetCustomMiddlewareProvider(a.customMiddlewareProvider)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
