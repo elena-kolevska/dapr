@@ -278,48 +278,48 @@ jobs:
             target_arch: amd64
             job_name: "Linux/amd64"
             sidecar_flavor: "stablecomponents"
-          # - os: ubuntu-latest
-          #   target_os: linux
-          #   target_arch: arm64
-          #   job_name: "Linux/arm64"
-          #   sidecar_flavor: "allcomponents"
-          # - os: ubuntu-latest
-          #   target_os: linux
-          #   target_arch: arm64
-          #   job_name: "Linux/arm64"
-          #   sidecar_flavor: "stablecomponents"
-          # - os: ubuntu-latest
-          #   target_os: linux
-          #   target_arch: arm
-          #   job_name: "Linux/arm"
-          #   sidecar_flavor: "allcomponents"
-          # - os: ubuntu-latest
-          #   target_os: linux
-          #   target_arch: arm
-          #   job_name: "Linux/arm"
-          #   sidecar_flavor: "stablecomponents"
-          # - os: windows-2019
-          #   target_os: windows
-          #   target_arch: amd64
-          #   windows_version: "1809"
-          #   job_name: "Windows 1809"
-          #   sidecar_flavor: "allcomponents"
-          # - os: windows-2022
-          #   target_os: windows
-          #   target_arch: amd64
-          #   windows_version: ltsc2022
-          #   job_name: "Windows LTSC 2022"
-          #   sidecar_flavor: "allcomponents"
-          # - os: macOS-latest
-          #   target_os: darwin
-          #   target_arch: amd64
-          #   job_name: "macOS/Intel"
-          #   sidecar_flavor: "allcomponents"
-          # - os: macOS-latest
-          #   target_os: darwin
-          #   target_arch: arm64
-          #   job_name: "macOS/Apple Silicon"
-          #   sidecar_flavor: "allcomponents"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm64
+            job_name: "Linux/arm64"
+            sidecar_flavor: "allcomponents"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm64
+            job_name: "Linux/arm64"
+            sidecar_flavor: "stablecomponents"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm
+            job_name: "Linux/arm"
+            sidecar_flavor: "allcomponents"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm
+            job_name: "Linux/arm"
+            sidecar_flavor: "stablecomponents"
+          - os: windows-2019
+            target_os: windows
+            target_arch: amd64
+            windows_version: "1809"
+            job_name: "Windows 1809"
+            sidecar_flavor: "allcomponents"
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+            windows_version: ltsc2022
+            job_name: "Windows LTSC 2022"
+            sidecar_flavor: "allcomponents"
+          - os: macOS-latest
+            target_os: darwin
+            target_arch: amd64
+            job_name: "macOS/Intel"
+            sidecar_flavor: "allcomponents"
+          - os: macOS-latest
+            target_os: darwin
+            target_arch: arm64
+            job_name: "macOS/Apple Silicon"
+            sidecar_flavor: "allcomponents"
     steps:
       - id: 'auth'
         name: Configure Google Credentials
@@ -493,46 +493,46 @@ jobs:
         with:
           name: dapr_linux_amd64_stablecomponents
           path: ${{ env.ARTIFACT_DIR }}
-      # - name: "download artifact: dapr_linux_arm_allcomponents"
-      #   uses: actions/download-artifact@master
-      #   with:
-      #     name: dapr_linux_arm_allcomponents
-      #     path: ${{ env.ARTIFACT_DIR }}
-      # - name: "download artifact: dapr_linux_arm_stablecomponents"
-      #   uses: actions/download-artifact@master
-      #   with:
-      #     name: dapr_linux_arm_stablecomponents
-      #     path: ${{ env.ARTIFACT_DIR }}
-      # - name: "download artifact: dapr_linux_arm64_allcomponents"
-      #   uses: actions/download-artifact@master
-      #   with:
-      #     name: dapr_linux_arm64_allcomponents
-      #     path: ${{ env.ARTIFACT_DIR }}
-      # - name: "download artifact: dapr_linux_arm64_stablecomponents"
-      #   uses: actions/download-artifact@master
-      #   with:
-      #     name: dapr_linux_arm64_stablecomponents
-      #     path: ${{ env.ARTIFACT_DIR }}
-      # - name: "download artifact: dapr_windows_amd64_allcomponents"
-      #   uses: actions/download-artifact@master
-      #   with:
-      #     name: dapr_windows_amd64_allcomponents
-      #     path: ${{ env.ARTIFACT_DIR }}
-      # - name: "download artifact: dapr_darwin_amd64_allcomponents"
-      #   uses: actions/download-artifact@master
-      #   with:
-      #     name: dapr_darwin_amd64_allcomponents
-      #     path: ${{ env.ARTIFACT_DIR }}
-      # - name: "download artifact: dapr_darwin_arm64_allcomponents"
-      #   uses: actions/download-artifact@master
-      #   with:
-      #     name: dapr_darwin_arm64_allcomponents
-      #     path: ${{ env.ARTIFACT_DIR }}
-      # - name: "download artifact: dapr_grafana_dashboards"
-      #   uses: actions/download-artifact@master
-      #   with:
-      #     name: dapr_grafana_dashboards
-      #     path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_linux_arm_allcomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm_allcomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_linux_arm_stablecomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm_stablecomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_linux_arm64_allcomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm64_allcomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_linux_arm64_stablecomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm64_stablecomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_windows_amd64_allcomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_windows_amd64_allcomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_darwin_amd64_allcomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_darwin_amd64_allcomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_darwin_arm64_allcomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_darwin_arm64_allcomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_grafana_dashboards"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_grafana_dashboards
+          path: ${{ env.ARTIFACT_DIR }}
       - name: generate checksum files
         run: cd ${ARTIFACT_DIR} && for i in *; do sha256sum -b $i > "$i.sha256"; done && cd -
       - name: lists artifacts
