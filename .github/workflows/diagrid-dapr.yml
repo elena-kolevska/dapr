@@ -425,17 +425,17 @@ jobs:
           name: dapr_grafana_dashboards
           path: ./grafana/*.json
       - uses: 'docker/login-action@v2'
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' 
         with:
           registry: '${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}'
           username: 'oauth2accesstoken'
           password: '${{ steps.auth.outputs.access_token }}'
       #replace with github registry login
       - name: Build and push Docker images to GCP Artifacts Registry
-        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' && env.DOCKER_REGISTRY_ID != ''
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' 
         env:
-          DOCKER_REGISTRY_ID: ${{ env.DOCKER_REGISTRY_ID }}
-          DAPR_REGISTRY: ${{ env.DOCKER_REGISTRY }}
+          DOCKER_REGISTRY_ID: "${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_DOCKER_REPOSITORY }}"
+          DAPR_REGISTRY: "${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_DOCKER_REPOSITORY }}"
           TARGET_OS: ${{ matrix.target_os }}
           TARGET_ARCH: ${{ matrix.target_arch }}
           WINDOWS_VERSION: ${{ matrix.windows_version }}
