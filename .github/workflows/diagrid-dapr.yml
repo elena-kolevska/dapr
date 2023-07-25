@@ -609,13 +609,13 @@ jobs:
           REPO_OWNER=${{ github.repository_owner }}
           # Lowercase the value
           echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
-      - name: Build and push Docker multiarch manifest to Docker Hub
+      - name: Build and push Docker multiarch manifest to GCP Artifacts Registry
         if: env.DOCKER_REGISTRY_ID != ''
         env:
           DOCKER_REGISTRY_ID: ${{ env.DOCKER_REGISTRY_ID }}
           DAPR_REGISTRY: ${{ env.DOCKER_REGISTRY }}
         run: |
-          echo "Build Docker multiarch manifest and push to Docker"
+          echo "Build Docker multiarch manifest and push to GCP Artifacts Registry..."
           DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
 
           # Publish the `-mariner` tag
@@ -626,7 +626,7 @@ jobs:
           LATEST_TAG=${{ env.LATEST_TAG }}-mariner \
             make docker-publish
         shell: bash
-      - name: Build and push Docker multiarch Windows manifest to Docker Hub
+      - name: Build and push Docker multiarch Windows manifest to GCP Artifacts Registry
         if: env.DOCKER_REGISTRY_ID != '' && matrix.sidecar_flavor == 'allcomponents'
         env:
           DOCKER_REGISTRY_ID: ${{ env.DOCKER_REGISTRY_ID }}
@@ -641,20 +641,6 @@ jobs:
           MANIFEST_TAG="${{ env.REL_VERSION }}" \
             make docker-publish
         shell: bash
-      - name: Build and push Docker multiarch manifest to GHCR
-        env:
-          DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
-        run: |
-          echo "Build Docker multiarch manifest and push to GHCR"
-          DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
-
-          # Publish the `-mariner` tag
-          # Mariner images are built only on linux/amd64 and linux/arm64
-          # Also, these use the "latest-mariner" tag if it's the latest
-          DOCKER_MULTI_ARCH="linux-amd64 linux-arm64" \
-          DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
-          LATEST_TAG=${{ env.LATEST_TAG }}-mariner \
-            make docker-publish
   helm:
     permissions: write-all
     name: Package Helm Chart
