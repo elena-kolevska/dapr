@@ -743,6 +743,15 @@ jobs:
           path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
 
       - name: Publish Helm Charts to OCI registry
+        if: ${{ !startswith(github.ref, 'refs/tags/v') }}
+        env:
+          DAPR_HELM_REPO_CODE_PATH: helm-charts
+        run: |
+          daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
+          cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          helm push dapr-0.0.0.tgz oci://${GCP_CONTAINER_REGISTRY_HOST}/${GCP_PROJECT_ID}/${GCP_CHART_REPOSITORY}
+      - name: Publish Helm Charts to OCI registry
+        if: startswith(github.ref, 'refs/tags/v') && github.repository_owner == 'diagridio'
         env:
           DAPR_HELM_REPO_CODE_PATH: helm-charts
         run: |
