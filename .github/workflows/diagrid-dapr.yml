@@ -573,6 +573,9 @@ jobs:
       DOCKER_REGISTRY: "${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_DOCKER_REPOSITORY }}"
       DOCKER_REGISTRY_ID: "${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_DOCKER_REPOSITORY }}"
       LATEST_TAG: latest
+      GCP_PROJECT_ID: '${{ secrets.GCP_PROJECT_ID }}'
+      GCP_CHART_REPOSITORY: '${{ secrets.GCP_CHART_REPOSITORY }}'
+      GCP_CONTAINER_REGISTRY_HOST: '${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
