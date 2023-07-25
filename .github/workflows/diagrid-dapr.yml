@@ -706,7 +706,8 @@ jobs:
     name: Publish helm charts to Helm github pages repo
     needs: helm
     environment: development
-    if: startswith(github.ref, 'refs/tags/v') && github.repository_owner == 'dapr'
+    #temp disable condition
+    #if: startswith(github.ref, 'refs/tags/v') && github.repository_owner == 'diagridio'
     env:
       ARTIFACT_DIR: ./release
       DAPR_VERSION_ARTIFACT: dapr_version
