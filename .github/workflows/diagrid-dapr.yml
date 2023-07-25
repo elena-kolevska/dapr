@@ -23,7 +23,7 @@ on:
       - release-*
       - feature/*
       #temp for testing
-      - add-diagrid-wf
+      - ahmed/add-diagrid-wfs
     tags:
       - v*
   pull_request:
