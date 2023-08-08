@@ -1,0 +1,755 @@
+#
+# Copyright 2021 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: diagrid dapr
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "00 22 * * *"
+  push:
+    branches:
+      - master
+      - release-*
+      - feature/*
+    tags:
+      - v*
+  pull_request:
+    branches:
+      - master
+      - release-*
+      - feature/*
+jobs:
+  lint:
+    name: lint & proto validation
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target_os: ["linux"]
+        target_arch: ["amd64"]
+    env:
+      GOLANGCILINT_VER: "v1.51.2"
+      PROTOC_VERSION: "21.12"
+      GOOS: "${{ matrix.target_os }}"
+      GOARCH: "${{ matrix.target_arch }}"
+      GOPROXY: "https://proxy.golang.org"
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: "go.mod"
+      - name: Check white space in .md files
+        if: github.event_name == 'pull_request'
+        run: |
+          TRAILING_WHITESPACE=0
+          # only check changed docs in pr
+          for file in $(git diff --cached --name-only --diff-filter=ACRMTU $GITHUB_BASE_REF | grep "\.md"); do
+            if grep -r '[[:blank:]]$' "$1" > /dev/null; then
+              echo "trailing whitespace: ${1}" >&2
+              ERRORS=yes
+              ((TRAILING_WHITESPACE=TRAILING_WHITESPACE+1))
+            fi
+          done
+          if [[ -n "$ERRORS" ]]; then
+            echo >&2
+            echo "ERRORS found" >&2
+            echo "${TRAILING_WHITESPACE} files with trailing whitespace" >&2
+            echo >&2
+            exit 1
+          fi
+      - name: Cache Go modules (Linux)
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Check for disallowed changes in go.mod
+        run: node ./.github/scripts/check_go_mod.mjs
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3.2.0
+        with:
+          version: ${{ env.GOLANGCILINT_VER }}
+          skip-cache: true
+          args: --build-tags allcomponents
+      - name: Run go mod tidy check diff
+        run: make modtidy check-diff
+      - name: Check for retracted dependencies
+        run: |
+          if [[ $(go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all) ]]; then
+            exit 1
+          else
+            exit 0
+          fi
+      - name: Run gen-proto check diff
+        run: |
+          wget https://github.com/protocolbuffers/protobuf/releases/download/v${{ env.PROTOC_VERSION }}/protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip
+          unzip protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip -d protoc
+          sudo cp -r protoc/include/google/ /usr/local/include/
+          sudo chmod -R 755 /usr/local/include/google
+          sudo cp protoc/bin/protoc /usr/local/bin/
+          sudo chmod +x /usr/local/bin/protoc
+          rm -r protoc protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip
+          make init-proto
+          make gen-proto check-proto-diff
+  unit-tests:
+    name: Unit tests
+    needs: lint
+    runs-on: "${{ matrix.os }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+            windows_version: ltsc2022
+          - os: macOS-latest
+            target_os: darwin
+            target_arch: amd64
+    env:
+      GOOS: "${{ matrix.target_os }}"
+      GOARCH: "${{ matrix.target_arch }}"
+      GOPROXY: "https://proxy.golang.org"
+      ARCHIVE_OUTDIR: "dist/archives"
+      TEST_OUTPUT_FILE_PREFIX: "test_report"
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: "go.mod"
+      - name: Cache Go modules (Linux)
+        if: matrix.target_os == 'linux'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Cache Go modules (Windows)
+        if: matrix.target_os == 'windows'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~\AppData\Local\go-build
+            ~\go\pkg\mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Cache Go modules (macOS)
+        if: matrix.target_os == 'darwin'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Caches/go-build
+            ~/go/pkg/mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Run make test
+        env:
+          COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
+        run: make test
+      - name: Codecov
+        uses: codecov/codecov-action@v1
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_unit.json
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_unit.json
+
+  integration-tests:
+    name: Integration tests
+    needs: lint
+    runs-on: "${{ matrix.os }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+            windows_version: ltsc2022
+          - os: macOS-latest
+            target_os: darwin
+            target_arch: amd64
+    env:
+      GOOS: "${{ matrix.target_os }}"
+      GOARCH: "${{ matrix.target_arch }}"
+      GOPROXY: "https://proxy.golang.org"
+      TEST_OUTPUT_FILE_PREFIX: "test_report"
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: "go.mod"
+      - name: Cache Go modules (Linux)
+        if: matrix.target_os == 'linux'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Cache Go modules (Windows)
+        if: matrix.target_os == 'windows'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~\AppData\Local\go-build
+            ~\go\pkg\mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Cache Go modules (macOS)
+        if: matrix.target_os == 'darwin'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Caches/go-build
+            ~/go/pkg/mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Run make test-integration
+        run: make test-integration
+        continue-on-error: ${{ matrix.target_os == 'windows' }}
+  build:
+    name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
+    runs-on: "${{ matrix.os }}"
+    permissions: write-all
+    environment: development
+    # needs: [unit-tests, integration-tests]
+    env:
+      GOOS: "${{ matrix.target_os }}"
+      GOARCH: "${{ matrix.target_arch }}"
+      GOPROXY: "https://proxy.golang.org"
+      ARCHIVE_OUTDIR: "dist/archives"
+      GCP_PROJECT_ID: '${{ secrets.GCP_PROJECT_ID }}'
+      GCP_CHART_REPOSITORY: '${{ secrets.GCP_CHART_REPOSITORY }}'
+      GCP_CONTAINER_REGISTRY_HOST: '${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+            job_name: "Linux/amd64"
+            sidecar_flavor: "allcomponents"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+            job_name: "Linux/amd64"
+            sidecar_flavor: "stablecomponents"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm64
+            job_name: "Linux/arm64"
+            sidecar_flavor: "allcomponents"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm64
+            job_name: "Linux/arm64"
+            sidecar_flavor: "stablecomponents"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm
+            job_name: "Linux/arm"
+            sidecar_flavor: "allcomponents"
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: arm
+            job_name: "Linux/arm"
+            sidecar_flavor: "stablecomponents"
+          - os: windows-2019
+            target_os: windows
+            target_arch: amd64
+            windows_version: "1809"
+            job_name: "Windows 1809"
+            sidecar_flavor: "allcomponents"
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+            windows_version: ltsc2022
+            job_name: "Windows LTSC 2022"
+            sidecar_flavor: "allcomponents"
+          - os: macOS-latest
+            target_os: darwin
+            target_arch: amd64
+            job_name: "macOS/Intel"
+            sidecar_flavor: "allcomponents"
+          - os: macOS-latest
+            target_os: darwin
+            target_arch: arm64
+            job_name: "macOS/Apple Silicon"
+            sidecar_flavor: "allcomponents"
+    steps:
+      - id: 'auth'
+        name: Configure Google Credentials
+        uses: google-github-actions/auth@v1
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER}}
+          service_account: ${{ secrets.SERVICE_ACCOUNT}}
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+        if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
+        with:
+          image: tonistiigi/binfmt:latest
+          platforms: arm64
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
+        with:
+          version: v0.10.1 # Don't use latest since it broke our workflow once
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: "go.mod"
+      - name: Parse release version and set REL_VERSION and LATEST_RELEASE
+        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
+      - name: Updates version for sidecar flavor
+        if: matrix.sidecar_flavor != 'allcomponents'
+        run: |
+          echo "REL_VERSION=${REL_VERSION}-${{matrix.sidecar_flavor}}" >>${GITHUB_ENV}
+          # Only sidecar is built
+          echo "BINARIES=daprd" >>${GITHUB_ENV}
+        shell: bash
+      - name: Set REPO_OWNER
+        if: matrix.target_os != 'darwin'
+        run: |
+          REPO_OWNER=${{ github.repository_owner }}
+          # Lowercase the value
+          echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
+        shell: bash
+      - name: Cache Go modules (Linux)
+        if: matrix.target_os == 'linux'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Cache Go modules (Windows)
+        if: matrix.target_os == 'windows'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~\AppData\Local\go-build
+            ~\go\pkg\mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Cache Go modules (macOS)
+        if: matrix.target_os == 'darwin'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Caches/go-build
+            ~/go/pkg/mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Run make release to build and archive binaries
+        env:
+          GOOS: ${{ matrix.target_os }}
+          GOARCH: ${{ matrix.target_arch }}
+          ARCHIVE_OUT_DIR: ${{ env.ARCHIVE_OUTDIR }}
+        if: matrix.sidecar_flavor == 'allcomponents'
+        run: |
+          mkdir -p "${ARCHIVE_OUT_DIR}"
+          make release
+        shell: bash
+      - name: Run make release to build and archive binaries for flavor
+        env:
+          GOOS: ${{ matrix.target_os }}
+          GOARCH: ${{ matrix.target_arch }}
+          ARCHIVE_OUT_DIR: ${{ env.ARCHIVE_OUTDIR }}
+          DAPR_SIDECAR_FLAVOR: "${{ matrix.sidecar_flavor }}"
+        if: matrix.sidecar_flavor != 'allcomponents'
+        run: |
+          mkdir -p "${ARCHIVE_OUT_DIR}"
+          make release-flavor
+        shell: bash
+      - name: upload artifacts
+        uses: actions/upload-artifact@master
+        with:
+          name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ matrix.sidecar_flavor }}
+          path: ${{ env.ARCHIVE_OUTDIR }}
+      - name: upload artifacts - grafana dashboards
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux' && matrix.sidecar_flavor == 'allcomponents'
+        uses: actions/upload-artifact@master
+        with:
+          name: dapr_grafana_dashboards
+          path: ./grafana/*.json
+      - uses: 'docker/login-action@v2'
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' 
+        with:
+          registry: '${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}'
+          username: 'oauth2accesstoken'
+          password: '${{ steps.auth.outputs.access_token }}'
+      #replace with github registry login
+      - name: Build and push Docker images to GCP Artifacts Registry
+        if: matrix.target_os != 'darwin' && github.event_name != 'pull_request' 
+        env:
+          DOCKER_REGISTRY_ID: "${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_DOCKER_REPOSITORY }}"
+          DAPR_REGISTRY: "${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_DOCKER_REPOSITORY }}"
+          TARGET_OS: ${{ matrix.target_os }}
+          TARGET_ARCH: ${{ matrix.target_arch }}
+          WINDOWS_VERSION: ${{ matrix.windows_version }}
+        run: |
+          echo "Build Docker images and push to GCP Artifacts Registry..."
+          DAPR_TAG=${{ env.REL_VERSION }} make docker-push
+
+          # Mariner images are built only on linux/amd64 and linux/arm64
+          if [ "$TARGET_OS" = "linux" ] && [ "$TARGET_ARCH" != "arm" ]; then
+            DOCKERFILE=Dockerfile-mariner DAPR_TAG="${{ env.REL_VERSION }}-mariner" make docker-push
+          fi
+        shell: bash
+  publish:
+    name: Publish binaries
+    needs: build
+    permissions: write-all
+    if: github.event_name != 'pull_request'
+    env:
+      ARTIFACT_DIR: ./release
+      DOCKER_REGISTRY: "${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_DOCKER_REPOSITORY }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Token
+        id: get_workflow_token
+        uses: peter-murray/workflow-application-token-action@v2
+        with:
+          application_id: ${{ secrets.DIAGRID_BOT_APPLICATION_ID }}
+          application_private_key: ${{ secrets.DIAGRID_BOT_APPLICATION_PRIVATE_KEY }}
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      - name: Parse release version and set REL_VERSION and LATEST_RELEASE
+        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
+      - name: Set REPO_OWNER
+        if: matrix.target_os != 'darwin'
+        shell: bash
+        run: |
+          REPO_OWNER=${{ github.repository_owner }}
+          # Lowercase the value
+          echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
+      - name: "download artifact: dapr_linux_amd64_allcomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_amd64_allcomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_linux_amd64_stablecomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_amd64_stablecomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_linux_arm_allcomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm_allcomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_linux_arm_stablecomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm_stablecomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_linux_arm64_allcomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm64_allcomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_linux_arm64_stablecomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_linux_arm64_stablecomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_windows_amd64_allcomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_windows_amd64_allcomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_darwin_amd64_allcomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_darwin_amd64_allcomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_darwin_arm64_allcomponents"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_darwin_arm64_allcomponents
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: "download artifact: dapr_grafana_dashboards"
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_grafana_dashboards
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: generate checksum files
+        run: cd ${ARTIFACT_DIR} && for i in *; do sha256sum -b $i > "$i.sha256"; done && cd -
+      - name: lists artifacts
+        run: ls -l ${{ env.ARTIFACT_DIR }}
+      - name: publish binaries to github
+        if: startswith(github.ref, 'refs/tags/v')
+        run: |
+          echo "installing github-release-cli..."
+          sudo npm install --silent --no-progress -g github-release-cli@2.1.0
+          if [ "$LATEST_RELEASE" = "true" ]; then
+            export RELEASE_BODY=`cat ./docs/release_notes/v${REL_VERSION}.md`
+          else
+            export RELEASE_BODY="This is the release candidate ${REL_VERSION}"
+          fi
+          # Get the list of files
+          RELEASE_ARTIFACT=(${ARTIFACT_DIR}/*)
+          # Parse repository to get owner and repo names
+          OWNER_NAME="${GITHUB_REPOSITORY%%/*}"
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+          export GITHUB_TOKEN=${{ steps.get_workflow_token.outputs.token }}
+          echo "Uploading Dapr Runtime Binaries to GitHub Release"
+          github-release upload \
+            --owner $OWNER_NAME \
+            --repo $REPO_NAME \
+            --tag "v${REL_VERSION}" \
+            --release-name "Dapr Runtime v${REL_VERSION}" \
+            --body "${RELEASE_BODY}" \
+            --prerelease true \
+            ${RELEASE_ARTIFACT[*]}
+        shell: bash
+  docker-publish:
+    permissions: write-all
+    name: Publish docker images
+    needs: build
+    environment: development
+    if: github.event_name != 'pull_request'
+    env:
+      DOCKER_REGISTRY: "${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_DOCKER_REPOSITORY }}"
+      DOCKER_REGISTRY_ID: "${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_DOCKER_REPOSITORY }}"
+      LATEST_TAG: latest
+      GCP_PROJECT_ID: '${{ secrets.GCP_PROJECT_ID }}'
+      GCP_CHART_REPOSITORY: '${{ secrets.GCP_CHART_REPOSITORY }}'
+      GCP_CONTAINER_REGISTRY_HOST: '${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sidecar_flavor: ["allcomponents", "stablecomponents"]
+    steps:
+      - id: 'auth'
+        name: Configure Google Credentials
+        uses: google-github-actions/auth@v1
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER}}
+          service_account: ${{ secrets.SERVICE_ACCOUNT}}
+      - uses: 'docker/login-action@v2'
+        with:
+          registry: '${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}'
+          username: 'oauth2accesstoken'
+          password: '${{ steps.auth.outputs.access_token }}'
+      - name: helm-auth
+        run: |-
+          helm registry login -u oauth2accesstoken -p ${{ steps.auth.outputs.access_token }} ${GCP_CONTAINER_REGISTRY_HOST}/${GCP_PROJECT_ID}/${GCP_CHART_REPOSITORY}
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      - name: Parse release version and set REL_VERSION and LATEST_RELEASE
+        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
+      - name: Updates version for sidecar flavor
+        if: matrix.sidecar_flavor != 'allcomponents'
+        run: |
+          echo "REL_VERSION=${REL_VERSION}-${{matrix.sidecar_flavor}}" >>${GITHUB_ENV}
+          echo "LATEST_TAG=latest-${{matrix.sidecar_flavor}}" >>${GITHUB_ENV}
+          # We are doing image flavors only for Linux.
+          echo "DOCKER_MULTI_ARCH=linux-amd64 linux-arm64 linux-arm" >>${GITHUB_ENV}
+          # Only sidecar is built
+          echo "BINARIES=daprd" >>${GITHUB_ENV}
+        shell: bash
+      - name: Set REPO_OWNER
+        shell: bash
+        run: |
+          REPO_OWNER=${{ github.repository_owner }}
+          # Lowercase the value
+          echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
+      - name: Build and push Docker multiarch manifest to GCP Artifacts Registry
+        if: env.DOCKER_REGISTRY_ID != ''
+        env:
+          DOCKER_REGISTRY_ID: ${{ env.DOCKER_REGISTRY_ID }}
+          DAPR_REGISTRY: ${{ env.DOCKER_REGISTRY }}
+        run: |
+          echo "Build Docker multiarch manifest and push to GCP Artifacts Registry..."
+          DAPR_TAG="${{ env.REL_VERSION }}" make docker-publish
+
+          # Publish the `-mariner` tag
+          # Mariner images are built only on linux/amd64 and linux/arm64
+          # Also, these use the "latest-mariner" tag if it's the latest
+          DOCKER_MULTI_ARCH="linux-amd64 linux-arm64" \
+          DAPR_TAG="${{ env.REL_VERSION }}-mariner" \
+          LATEST_TAG=${{ env.LATEST_TAG }}-mariner \
+            make docker-publish
+        shell: bash
+      - name: Build and push Docker multiarch Windows manifest to GCP Artifacts Registry
+        if: env.DOCKER_REGISTRY_ID != '' && matrix.sidecar_flavor == 'allcomponents'
+        env:
+          DOCKER_REGISTRY_ID: ${{ env.DOCKER_REGISTRY_ID }}
+          DAPR_REGISTRY: ${{ env.DOCKER_REGISTRY }}
+        run: |
+          # Publish the `-windows-amd64` manifest.
+          # Note, the "latest" tag from the previous step already contains 
+          # the windows images, so we don't need to publish the "latest-windows-amd64" tag.
+          DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
+          DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
+          LATEST_RELEASE=false \
+          MANIFEST_TAG="${{ env.REL_VERSION }}" \
+            make docker-publish
+        shell: bash
+  helm:
+    permissions: write-all
+    name: Package Helm Chart
+    needs: [publish, docker-publish]
+    if: github.event_name != 'pull_request'
+    env:
+      ARTIFACT_DIR: ./release
+      HELM_PACKAGE_DIR: helm
+      DAPR_VERSION_ARTIFACT: dapr_version
+      HELMVER: v3.7.2
+      GCP_PROJECT_ID: '${{ secrets.GCP_PROJECT_ID }}'
+      GCP_DOCKER_REPOSITORY: '${{ secrets.GCP_DOCKER_REPOSITORY }}'
+      GCP_CONTAINER_REGISTRY_HOST: '${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Helm ${{ env.HELMVER }}
+        uses: azure/setup-helm@v1
+        with:
+          version: ${{ env.HELMVER }}
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      - name: Parse release version and set REL_VERSION and LATEST_RELEASE
+        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
+      - name: Set REPO_OWNER
+        if: matrix.target_os != 'darwin'
+        shell: bash
+        run: |
+          REPO_OWNER=${{ github.repository_owner }}
+          # Lowercase the value
+          echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
+      - name: Update Helm chart files for release version ${{ env.REL_VERSION }}
+        run: bash ./.github/scripts/set_helm_dapr_version.sh
+      - name: Generate Helm chart manifest
+        env:
+          DAPR_REGISTRY: "${{env.GCP_CONTAINER_REGISTRY_HOST}}/${{env.GCP_PROJECT_ID}}/${{env.GCP_DOCKER_REPOSITORY}}"
+          DAPR_TAG: ${{ env.REL_VERSION }}
+        run: |
+          make manifest-gen
+        shell: bash
+      - name: Move Helm chart manifest to artifact
+        run: |
+          mkdir -p ${{ env.ARTIFACT_DIR }}
+          mv ./dist/install/dapr.yaml ${{ env.ARTIFACT_DIR }}/dapr-operator.yaml
+      - name: Save release version
+        run: |
+          mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          echo ${REL_VERSION} > ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}
+      - name: Package Helm chart
+        if: ${{ env.LATEST_RELEASE }} == "true" 
+        env:
+          HELM_CHARTS_DIR: charts/dapr
+        run: |
+          mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          helm package ${{ env.HELM_CHARTS_DIR }} --destination ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+      - name: Upload Helm charts package to artifacts
+        if: ${{ env.LATEST_RELEASE }} == "true" 
+        uses: actions/upload-artifact@master
+        with:
+          name: dapr_helm_charts_package
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+  helmpublish:
+    permissions: write-all
+    name: Publish helm charts to Helm github pages repo
+    needs: helm
+    environment: development
+    env:
+      ARTIFACT_DIR: ./release
+      DAPR_VERSION_ARTIFACT: dapr_version
+      HELM_PACKAGE_DIR: helm
+      GCP_PROJECT_ID: '${{ secrets.GCP_PROJECT_ID }}'
+      GCP_CHART_REPOSITORY: '${{ secrets.GCP_CHART_REPOSITORY }}'
+      GCP_CONTAINER_REGISTRY_HOST: '${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}'
+    runs-on: ubuntu-latest
+    steps:
+      - id: 'auth'
+        name: Configure Google Credentials
+        uses: google-github-actions/auth@v1
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER}}
+          service_account: ${{ secrets.SERVICE_ACCOUNT}}
+      - uses: 'docker/login-action@v2'
+        with:
+          registry: '${{ secrets.GCP_CONTAINER_REGISTRY_HOST }}'
+          username: 'oauth2accesstoken'
+          password: '${{ steps.auth.outputs.access_token }}'
+      - name: helm-auth
+        run: |-
+          helm registry login -u oauth2accesstoken -p ${{ steps.auth.outputs.access_token }} ${GCP_CONTAINER_REGISTRY_HOST}/${GCP_PROJECT_ID}/${GCP_CHART_REPOSITORY}
+
+      - name: Create Helm charts directory
+        run: |
+          mkdir -p ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+      - name: download artifacts - dapr_helm_charts_package
+        uses: actions/download-artifact@master
+        with:
+          name: dapr_helm_charts_package
+          path: ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+
+      - name: Publish Helm Charts to OCI registry
+        if: ${{ !startswith(github.ref, 'refs/tags/v') }}
+        env:
+          DAPR_HELM_REPO_CODE_PATH: helm-charts
+        run: |
+          daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
+          cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          helm push dapr-0.0.0.tgz oci://${GCP_CONTAINER_REGISTRY_HOST}/${GCP_PROJECT_ID}/${GCP_CHART_REPOSITORY}
+      - name: Publish Helm Charts to OCI registry
+        if: startswith(github.ref, 'refs/tags/v') && github.repository_owner == 'diagridio'
+        env:
+          DAPR_HELM_REPO_CODE_PATH: helm-charts
+        run: |
+          daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
+          cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          helm push dapr-${daprVersion}.tgz oci://${GCP_CONTAINER_REGISTRY_HOST}/${GCP_PROJECT_ID}/${GCP_CHART_REPOSITORY}
