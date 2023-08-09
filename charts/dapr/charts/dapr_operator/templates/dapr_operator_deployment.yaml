@@ -26,6 +26,7 @@ data:
   {{ else }}tls.key: {{ b64enc $cert.Key }}
   {{ end }}
 ---
+{{- if not .Values.global.operator.disableWebhooks }}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -41,6 +42,7 @@ data:
   {{ else }}caBundle: {{ b64enc $ca.Cert }}
   {{ end }}
 ---
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -127,6 +129,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+{{- if eq .Values.global.operator.disableWebhooks true }}
+        - name: ENABLE_WEBHOOKS
+          value: "false"
+{{- end }}
         ports:
         - containerPort: 6500
 {{- if eq .Values.global.prometheus.enabled true }}
@@ -145,6 +151,7 @@ spec:
           - name: credentials
             mountPath: /var/run/dapr/credentials
             readOnly: true
+{{- if not .Values.global.operator.disableWebhooks }}
           - name: webhook-creds
             {{- if eq .Values.global.daprControlPlaneOs "windows" }}
             mountPath: "C:\\Windows\\TEMP\\k8s-webhook-server\\serving-certs"
@@ -152,6 +159,7 @@ spec:
             mountPath: /tmp/k8s-webhook-server/serving-certs
             {{- end }}
             readOnly: true
+{{- end }}
         command:
 {{- if eq .Values.debug.enabled false }}
         - "/operator"
@@ -211,9 +219,11 @@ spec:
         - name: credentials
           secret:
             secretName: dapr-trust-bundle
+{{- if not .Values.global.operator.disableWebhooks }}
         - name: webhook-creds
           secret:
             secretName: dapr-webhook-cert
+{{- end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

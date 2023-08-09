@@ -272,7 +272,8 @@ func (o *operator) Run(ctx context.Context) error {
 		/*
 			Make sure to set `ENABLE_WEBHOOKS=false` when we run locally.
 		*/
-		if !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false") {
+		enableWebhooks := !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false")
+		if enableWebhooks {
 			rErr = ctrl.NewWebhookManagedBy(o.mgr).
 				For(&subscriptionsapiV1alpha1.Subscription{}).
 				Complete()
@@ -293,9 +294,11 @@ func (o *operator) Run(ctx context.Context) error {
 			return fmt.Errorf("failed to load cert chain: %w", rErr)
 		}
 
-		rErr = o.patchCRDs(ctx, o.mgr.GetConfig(), "subscriptions.dapr.io")
-		if rErr != nil {
-			return rErr
+		if enableWebhooks {
+			rErr = o.patchCRDs(ctx, o.mgr.GetConfig(), "subscriptions.dapr.io")
+			if rErr != nil {
+				return rErr
+			}
 		}
 
 		log.Info("Starting api server")
