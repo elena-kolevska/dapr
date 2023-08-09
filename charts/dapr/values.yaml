@@ -9,6 +9,7 @@ global:
   tolerations: []
   rbac:
     namespaced: false
+    skipClusterRBAC: false
   ha:
     enabled: false
     replicaCount: 3
@@ -45,3 +46,4 @@ global:
 
   operator:
     watchdogCanPatchPodLabels: false
+    disableWebhooks: false
