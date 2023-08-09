@@ -8,6 +8,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 ---
+{{ if not .Values.global.rbac.skipClusterRBAC }}
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -45,6 +46,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: dapr-sentry
+{{- end }}
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
@@ -64,10 +66,13 @@ rules:
     resources: ["configmaps"]
     verbs: ["get", "update", "watch", "list"]
     resourceNames: ["dapr-trust-bundle"]
-{{- if eq .Values.global.rbac.namespaced true }}
+{{- if or (eq .Values.global.rbac.namespaced true) (eq .Values.global.rbac.skipClusterRBAC true) }}
   - apiGroups: ["dapr.io"]
     resources: ["configurations"]
-    verbs: ["list"]
+    verbs: ["list", "get", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "get", "watch"]
 {{- end }}
 ---
 kind: RoleBinding

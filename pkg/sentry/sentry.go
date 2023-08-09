@@ -170,6 +170,7 @@ func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertific
 				RestConfig:     config,
 				SentryID:       sentryID,
 				ControlPlaneNS: security.CurrentNamespace(),
+				NamespacedRBAC: s.conf.RBACNamespaced,
 			})
 			if err != nil {
 				return nil, err
