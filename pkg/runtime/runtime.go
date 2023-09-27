@@ -38,6 +38,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
+	gogrpc "google.golang.org/grpc"
 	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -148,6 +149,9 @@ type DaprRuntime struct {
 	workflowEngine *wfengine.WorkflowEngine
 
 	wg sync.WaitGroup
+
+	// diagrid custom
+	customMiddlewareProvider func() (gogrpc.UnaryServerInterceptor, gogrpc.StreamServerInterceptor)
 }
 
 type componentPreprocessRes struct {
@@ -304,6 +308,14 @@ func newDaprRuntime(ctx context.Context,
 	}
 
 	return rt, nil
+}
+
+func (a *DaprRuntime) GetGlobalConfig() *config.Configuration {
+	return a.globalConfig
+}
+
+func (a *DaprRuntime) SetCustomGRPCMiddlewareProvider(c func() (gogrpc.UnaryServerInterceptor, gogrpc.StreamServerInterceptor)) {
+	a.customMiddlewareProvider = c
 }
 
 // Run performs initialization of the runtime with the runtime and global configurations.
@@ -1034,6 +1046,7 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(a.runtimeConfig.apiListenAddresses, port)
 	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.GetTracingSpec(), a.globalConfig.GetMetricsSpec(), a.globalConfig.GetAPISpec(), a.proxy, a.workflowEngine)
+	server.SetCustomMiddlewareProvider(a.customMiddlewareProvider)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}

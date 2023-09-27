@@ -54,26 +54,29 @@ const (
 type Server interface {
 	io.Closer
 	StartNonBlocking() error
+
+	SetCustomMiddlewareProvider(customMiddlewareProvider func() (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor))
 }
 
 type server struct {
-	api              API
-	config           ServerConfig
-	tracingSpec      config.TracingSpec
-	metricSpec       config.MetricSpec
-	servers          []*grpc.Server
-	kind             string
-	logger           logger.Logger
-	infoLogger       logger.Logger
-	maxConnectionAge *time.Duration
-	authToken        string
-	apiSpec          config.APISpec
-	proxy            messaging.Proxy
-	workflowEngine   *wfengine.WorkflowEngine
-	sec              security.Handler
-	wg               sync.WaitGroup
-	closed           atomic.Bool
-	closeCh          chan struct{}
+	api                      API
+	config                   ServerConfig
+	tracingSpec              config.TracingSpec
+	metricSpec               config.MetricSpec
+	servers                  []*grpc.Server
+	kind                     string
+	logger                   logger.Logger
+	infoLogger               logger.Logger
+	maxConnectionAge         *time.Duration
+	authToken                string
+	apiSpec                  config.APISpec
+	proxy                    messaging.Proxy
+	customMiddlewareProvider func() (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor)
+	workflowEngine           *wfengine.WorkflowEngine
+	sec                      security.Handler
+	wg                       sync.WaitGroup
+	closed                   atomic.Bool
+	closeCh                  chan struct{}
 }
 
 var (
@@ -99,6 +102,10 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, 
 		workflowEngine: workflowEngine,
 		closeCh:        make(chan struct{}),
 	}
+}
+
+func (s *server) SetCustomMiddlewareProvider(customMiddlewareProvider func() (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor)) {
+	s.customMiddlewareProvider = customMiddlewareProvider
 }
 
 // NewInternalServer returns a new gRPC server for Dapr to Dapr communications.
@@ -247,6 +254,12 @@ func (s *server) getMiddlewareOptions() []grpc.ServerOption {
 
 	if s.config.EnableAPILogging && s.infoLogger != nil {
 		unary, stream := s.getGRPCAPILoggingMiddlewares()
+		intr = append(intr, unary)
+		intrStream = append(intrStream, stream)
+	}
+
+	if s.customMiddlewareProvider != nil {
+		unary, stream := s.customMiddlewareProvider()
 		intr = append(intr, unary)
 		intrStream = append(intrStream, stream)
 	}
