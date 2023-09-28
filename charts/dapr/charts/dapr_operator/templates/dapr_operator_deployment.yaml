@@ -88,6 +88,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+{{- if eq .Values.global.operator.disableWebhooks true }}
+        - name: ENABLE_WEBHOOKS
+          value: "false"
+{{- end }}
         ports:
         - containerPort: 6500
 {{- if eq .Values.global.prometheus.enabled true }}
