@@ -8,7 +8,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 ---
-{{- if eq .Values.global.rbac.namespaced true }}
+{{- if or (eq .Values.global.rbac.namespaced true) (eq .Values.global.rbac.skipClusterRBAC true) }}
 kind: Role
 {{- else }}
 kind: ClusterRole
@@ -22,7 +22,7 @@ metadata:
     {{- end }}
 rules: []
 ---
-{{- if eq .Values.global.rbac.namespaced true }}
+{{- if or (eq .Values.global.rbac.namespaced true) (eq .Values.global.rbac.skipClusterRBAC true) }}
 kind: RoleBinding
 {{- else }}
 kind: ClusterRoleBinding
@@ -40,7 +40,7 @@ subjects:
   namespace: {{ .Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-{{- if eq .Values.global.rbac.namespaced true }}
+{{- if or (eq .Values.global.rbac.namespaced true) (eq .Values.global.rbac.skipClusterRBAC true) }}
   kind: Role
 {{- else }}
   kind: ClusterRole

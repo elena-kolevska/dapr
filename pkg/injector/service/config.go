@@ -15,6 +15,7 @@ package service
 
 import (
 	"encoding/json"
+	"os"
 
 	"github.com/kelseyhightower/envconfig"
 	corev1 "k8s.io/api/core/v1"
@@ -136,4 +137,8 @@ func (c *Config) parseTolerationsJSON() {
 	}
 
 	c.parsedEntrypointTolerations = ts
+}
+
+func GetNamespace() string {
+	return os.Getenv("NAMESPACE")
 }
