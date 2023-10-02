@@ -11,7 +11,11 @@ metadata:
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
+{{ if not .Values.global.rbac.skipClusterRBAC }}
   name: dapr-sentry
+{{- else }}
+  name: dapr-sentry-{{ .Release.Namespace }}
+{{- end }}
   labels:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
@@ -32,7 +36,11 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
+{{ if not .Values.global.rbac.skipClusterRBAC }}
   name: dapr-sentry
+{{- else }}
+  name: dapr-sentry-{{ .Release.Namespace }}
+{{- end }}
   labels:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
@@ -44,7 +52,11 @@ subjects:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
+{{ if not .Values.global.rbac.skipClusterRBAC }}
   name: dapr-sentry
+{{- else }}
+  name: dapr-sentry-{{ .Release.Namespace }}
+{{- end }}
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
@@ -67,7 +79,10 @@ rules:
 {{- if eq .Values.global.rbac.namespaced true }}
   - apiGroups: ["dapr.io"]
     resources: ["configurations"]
-    verbs: ["list"]
+    verbs: ["list", "get", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "get", "watch"]
 {{- end }}
 ---
 kind: RoleBinding

@@ -214,7 +214,8 @@ func (o *operator) Run(ctx context.Context) error {
 	/*
 		Make sure to set `ENABLE_WEBHOOKS=false` when we run locally.
 	*/
-	if !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false") {
+	enableWebhooks := !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false")
+	if enableWebhooks {
 		err := ctrl.NewWebhookManagedBy(o.mgr).
 			For(&subscriptionsapiV1alpha1.Subscription{}).
 			Complete()
@@ -234,10 +235,12 @@ func (o *operator) Run(ctx context.Context) error {
 	runner := concurrency.NewRunnerManager(
 		o.secProvider.Run,
 		func(ctx context.Context) error {
-			// Wait for webhook certificates to be ready before starting the manager.
-			_, rErr := o.secProvider.Handler(ctx)
-			if rErr != nil {
-				return rErr
+			if enableWebhooks {
+				// Wait for webhook certificates to be ready before starting the manager.
+				_, rErr := o.secProvider.Handler(ctx)
+				if rErr != nil {
+					return rErr
+				}
 			}
 			return o.mgr.Start(ctx)
 		},
@@ -266,6 +269,11 @@ func (o *operator) Run(ctx context.Context) error {
 			return nil
 		},
 		func(ctx context.Context) error {
+			if !enableWebhooks {
+				<-ctx.Done()
+				return nil
+			}
+
 			sec, rErr := o.secProvider.Handler(ctx)
 			if rErr != nil {
 				return rErr

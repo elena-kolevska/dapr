@@ -62,6 +62,7 @@ type Config struct {
 	RootCertPath     string
 	IssuerCertPath   string
 	IssuerKeyPath    string
+	RBACNamespaced   bool
 	Validators       map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
 	DefaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
 	Features         []daprGlobalConfig.FeatureSpec
@@ -106,7 +107,7 @@ func getKubernetesConfig(configName string) (Config, error) {
 		return defaultConfig, err
 	}
 
-	list, err := daprClient.ConfigurationV1alpha1().Configurations(metaV1.NamespaceAll).List(metaV1.ListOptions{})
+	list, err := daprClient.ConfigurationV1alpha1().Configurations(GetNamespace()).List(metaV1.ListOptions{})
 	if err != nil {
 		return defaultConfig, err
 	}
@@ -203,4 +204,8 @@ func parseConfiguration(conf Config, daprConfig *daprGlobalConfig.Configuration)
 	}
 
 	return conf, nil
+}
+
+func GetNamespace() string {
+	return os.Getenv("NAMESPACE")
 }

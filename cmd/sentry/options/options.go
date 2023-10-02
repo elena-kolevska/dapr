@@ -42,6 +42,7 @@ type Options struct {
 	Kubeconfig            string
 	Logger                logger.Options
 	Metrics               *metrics.Options
+	RBACNamespaced        bool
 
 	RootCAFilename     string
 	IssuerCertFilename string
@@ -60,6 +61,7 @@ func New() *Options {
 	flag.StringVar(&opts.TokenAudience, "token-audience", "", "DEPRECATED, flag has no effect.")
 	flag.IntVar(&opts.Port, "port", config.DefaultPort, "The port for the sentry server to listen on")
 	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
+	flag.BoolVar(&opts.RBACNamespaced, "rbac-namespaced", false, "RBAC restricted to a single namespace")
 
 	if home := homedir.HomeDir(); home != "" {
 		flag.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
