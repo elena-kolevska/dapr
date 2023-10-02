@@ -58,6 +58,7 @@ type Options struct {
 	RestConfig     *rest.Config
 	SentryID       spiffeid.ID
 	ControlPlaneNS string
+	NamespacedRBAC bool
 }
 
 // kubernetes implements the validator.Interface. It validates the request by
@@ -85,7 +86,12 @@ func New(ctx context.Context, opts Options) (validator.Validator, error) {
 		return nil, err
 	}
 
-	cache, err := cache.New(opts.RestConfig, cache.Options{Scheme: scheme})
+	cacheOpts := cache.Options{Scheme: scheme}
+	if opts.NamespacedRBAC {
+		cacheOpts.Namespace = opts.ControlPlaneNS
+	}
+
+	cache, err := cache.New(opts.RestConfig, cacheOpts)
 	if err != nil {
 		return nil, err
 	}
