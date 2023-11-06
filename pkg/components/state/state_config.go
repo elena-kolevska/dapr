@@ -15,6 +15,10 @@ package state
 
 import (
 	"fmt"
+	"github.com/dapr/dapr/pkg/messages"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"os"
 	"strings"
 	"sync"
@@ -127,7 +131,29 @@ func getStateConfiguration(storeName string) *StoreConfiguration {
 
 func checkKeyIllegal(key string) error {
 	if strings.Contains(key, daprSeparator) {
-		return fmt.Errorf("input key/keyPrefix '%s' can't contain '%s'", key, daprSeparator)
+		message := fmt.Sprintf("input key/keyPrefix '%s' can't contain '%s'", key, daprSeparator)
+
+		errorInfo := &errdetails.ErrorInfo{
+			Domain: messages.ErrInfoDomain,
+			Reason: messages.ReasonPrefixStateStore + "ILLEGAL_KEY",
+			Metadata: map[string]string{
+				"key": key,
+			},
+		}
+		badRequest := &errdetails.BadRequest{}
+
+		// Add field violations to the BadRequest
+		badRequest.FieldViolations = append(badRequest.FieldViolations, &errdetails.BadRequest_FieldViolation{
+			Field:       key,
+			Description: message,
+		})
+
+		ste, stErr := status.New(codes.InvalidArgument, message).WithDetails(errorInfo, badRequest)
+		if stErr != nil {
+			return stErr
+		}
+
+		return ste.Err()
 	}
 	return nil
 }

@@ -705,6 +705,8 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 	state, ok := a.universal.CompStore.GetStateStore(storeName)
 	if !ok {
 		err := messages.ErrStateStoreNotFound.WithFormat(storeName)
+		// TODO: TEMP - ErrorsPOC
+		err = err.WithResourceInfo("state.redis/v1", "my-redis-component", "user", "possible etag mismatch. error from state store")
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return nil, "", err
@@ -1920,6 +1922,8 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	store, ok := a.universal.CompStore.GetStateStore(storeName)
 	if !ok {
 		err := messages.ErrStateStoreNotFound.WithFormat(storeName)
+		// TODO: TEMP - ErrorsPOC
+		err = err.WithResourceInfo("state.redis/v1", "my-redis-component", "user", "possible etag mismatch. error from state store")
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return

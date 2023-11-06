@@ -17,6 +17,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/golang/protobuf/proto"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"net/http"
 
 	grpcCodes "google.golang.org/grpc/codes"
@@ -40,16 +42,42 @@ type APIError struct {
 	httpCode int
 	// Status code for gRPC responses.
 	grpcCode grpcCodes.Code
+	// ErrorInfo Reason
+	errInfoReason   string
+	errInfoMetadata map[string]string
+	details         []proto.Message
 }
 
 // WithFormat returns a copy of the error with the message going through fmt.Sprintf with the arguments passed to this method.
 func (e APIError) WithFormat(a ...any) APIError {
-	return APIError{
-		message:  fmt.Sprintf(e.message, a...),
-		tag:      e.tag,
-		httpCode: e.httpCode,
-		grpcCode: e.grpcCode,
+	e.message = fmt.Sprintf(e.message, a...)
+	return e
+}
+
+func (e APIError) WithDetails(details ...proto.Message) APIError {
+	e.details = append(e.details, details...)
+	return e
+}
+
+func (e APIError) WithErrorInfo(reason string, metadata map[string]string) APIError {
+	errorInfo := &errdetails.ErrorInfo{
+		Domain:   ErrInfoDomain,
+		Reason:   reason,
+		Metadata: metadata,
 	}
+	e.details = append(e.details, errorInfo)
+	return e
+}
+func (e APIError) WithResourceInfo(resourceType string, resourceName string, owner string, description string) APIError {
+	resourceInfo := &errdetails.ResourceInfo{
+		ResourceType: resourceType,
+		ResourceName: resourceName,
+		Owner:        owner,
+		Description:  description,
+	}
+
+	e.details = append(e.details, resourceInfo)
+	return e
 }
 
 // Message returns the value of the message property.
@@ -68,6 +96,11 @@ func (e APIError) Tag() string {
 	return e.tag
 }
 
+// Details returns the value of the details property.
+func (e APIError) Details() []proto.Message {
+	return e.details
+}
+
 // HTTPCode returns the value of the HTTPCode property.
 func (e APIError) HTTPCode() int {
 	if e.httpCode == 0 {
@@ -79,7 +112,24 @@ func (e APIError) HTTPCode() int {
 // GRPCStatus returns the gRPC status.Status object.
 // This method allows APIError to comply with the interface expected by status.FromError().
 func (e APIError) GRPCStatus() *grpcStatus.Status {
-	return grpcStatus.New(e.grpcCode, e.Message())
+	status := grpcStatus.New(e.grpcCode, e.Message())
+
+	if e.errInfoReason != "" {
+		errorInfo := &errdetails.ErrorInfo{
+			Domain:   ErrInfoDomain,
+			Reason:   e.errInfoReason,
+			Metadata: e.errInfoMetadata,
+		}
+		status, _ = status.WithDetails(errorInfo)
+	}
+
+	if len(e.details) > 0 {
+		status, _ = status.WithDetails(e.details...)
+	}
+
+	return status
+
+	//return grpcStatus.New(e.grpcCode, e.Message())
 }
 
 // Error implements the error interface.

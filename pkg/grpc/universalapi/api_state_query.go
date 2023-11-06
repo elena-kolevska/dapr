@@ -37,6 +37,9 @@ func (a *UniversalAPI) GetStateStore(name string) (state.Store, error) {
 	state, ok := a.CompStore.GetStateStore(name)
 	if !ok {
 		err := messages.ErrStateStoreNotFound.WithFormat(name)
+		// TODO: TEMP - ErrorsPOC
+		err = err.WithResourceInfo("state.redis/v1", "my-redis-component", "user", "possible etag mismatch. error from state store")
+
 		a.Logger.Debug(err)
 		return nil, err
 	}
