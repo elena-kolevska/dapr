@@ -44,6 +44,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/errutil"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
@@ -56,6 +57,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
+	kitErrors "github.com/dapr/kit/errors"
 )
 
 const daprHTTPStatusHeader = "dapr-http-status"
@@ -116,37 +118,63 @@ func NewAPI(opts APIOpts) API {
 
 // validateAndGetPubsbuAndTopic validates the request parameters and returns the pubsub interface, pubsub name, topic name, rawPayload metadata if set
 // or an error.
-func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map[string]string) (pubsub.PubSub, string, string, bool, error) {
+func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map[string]string) (pubsub.PubSub, string, string, bool, *kitErrors.Error) {
+	var err *kitErrors.Error
+
+	pubsubType := string(contribMetadata.PubSubType)
+
 	if a.pubsubAdapter == nil {
-		return nil, "", "", false, status.Error(codes.FailedPrecondition, messages.ErrPubsubNotConfigured)
+		err = errutil.ErrPubSubNotConfigured
+		err = err.WithResourceInfo(pubsubType, pubsubName, "", err.Message).
+			WithErrorInfo(err.Message, reqMeta)
+
+		return nil, "", "", false, err
 	}
 
 	if pubsubName == "" {
-		return nil, "", "", false, status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
+		err = errutil.ErrPubSubNameEmpty
+		err = err.WithResourceInfo(pubsubType, pubsubName, "", err.Message).
+			WithErrorInfo(err.Message, reqMeta)
+
+		return nil, "", "", false, err
 	}
 
 	thepubsub, ok := a.UniversalAPI.CompStore.GetPubSub(pubsubName)
 	if !ok {
-		return nil, "", "", false, status.Errorf(codes.InvalidArgument, messages.ErrPubsubNotFound, pubsubName)
+		err = errutil.ErrPubSubNotFound.WithVars(pubsubName)
+		err = err.WithErrorInfo(err.Message, reqMeta).
+			WithResourceInfo(pubsubType, pubsubName, "", err.Message)
+
+		return nil, "", "", false, err
 	}
 
 	if topic == "" {
-		return nil, "", "", false, status.Errorf(codes.InvalidArgument, messages.ErrTopicEmpty, pubsubName)
+		err = errutil.ErrPubSubTopicEmpty.WithVars(pubsubName)
+		err = err.WithResourceInfo(pubsubType, pubsubName, "", err.Message).
+			WithErrorInfo(err.Message, reqMeta)
+
+		return nil, "", "", false, err
 	}
 
 	rawPayload, metaErr := contribMetadata.IsRawPayload(reqMeta)
 	if metaErr != nil {
-		return nil, "", "", false, messages.ErrPubSubMetadataDeserialize.WithFormat(metaErr)
+		err = errutil.ErrPubSubMetadataDeserialize.WithVars(metaErr)
+		err = err.WithResourceInfo(pubsubType, pubsubName, "", err.Message).
+			WithErrorInfo(err.Message, reqMeta)
+
+		return nil, "", "", false, err
 	}
 
-	return thepubsub.Component, pubsubName, topic, rawPayload, nil
+	return thepubsub.Component, pubsubName, topic, rawPayload, err
 }
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
 	thepubsub, pubsubName, topic, rawPayload, validationErr := a.validateAndGetPubsubAndTopic(in.PubsubName, in.Topic, in.Metadata)
+
 	if validationErr != nil {
+		//TODO: update return type of this func
 		apiServerLogger.Debug(validationErr)
-		return &emptypb.Empty{}, validationErr
+		return &emptypb.Empty{}, errors.New(validationErr.Error())
 	}
 
 	body := []byte{}
@@ -322,9 +350,10 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 
 func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPublishRequest) (*runtimev1pb.BulkPublishResponse, error) {
 	thepubsub, pubsubName, topic, rawPayload, validationErr := a.validateAndGetPubsubAndTopic(in.PubsubName, in.Topic, in.Metadata)
+
 	if validationErr != nil {
 		apiServerLogger.Debug(validationErr)
-		return &runtimev1pb.BulkPublishResponse{}, validationErr
+		return &runtimev1pb.BulkPublishResponse{}, errors.New(validationErr.Error())
 	}
 
 	span := diagUtils.SpanFromContext(ctx)
