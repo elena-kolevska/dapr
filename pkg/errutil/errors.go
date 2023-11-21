@@ -135,6 +135,12 @@ var (
 	// Secrets
 
 	// State
+	ErrStateStoreNotFound = kitErrors.New(
+		grpcCodes.InvalidArgument,
+		http.StatusBadRequest,
+		"state store %s is not found",
+		"ERR_STATE_STORE_NOT_FOUND",
+	)
 
 	// Workflows
 )

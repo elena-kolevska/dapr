@@ -16,6 +16,7 @@ package universalapi
 import (
 	"context"
 	"encoding/json"
+	"github.com/dapr/dapr/pkg/errutil"
 	"time"
 
 	"github.com/dapr/components-contrib/state"
@@ -34,14 +35,16 @@ func (a *UniversalAPI) GetStateStore(name string) (state.Store, error) {
 		return nil, err
 	}
 
-	state, ok := a.CompStore.GetStateStore(name)
+	stateStore, ok := a.CompStore.GetStateStore(name)
 	if !ok {
-		err := messages.ErrStateStoreNotFound.WithFormat(name)
+		err := errutil.ErrStateStoreNotFound.
+			WithVars(name).
+			WithErrorInfo(errutil.StateStore+errutil.ErrNotFound, nil)
 		a.Logger.Debug(err)
 		return nil, err
 	}
 
-	return state, nil
+	return stateStore, nil
 }
 
 func (a *UniversalAPI) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error) {

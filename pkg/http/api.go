@@ -704,14 +704,16 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 
 	storeName := a.getStateStoreName(reqCtx)
 
-	state, ok := a.universal.CompStore.GetStateStore(storeName)
+	stateStore, ok := a.universal.CompStore.GetStateStore(storeName)
 	if !ok {
-		err := messages.ErrStateStoreNotFound.WithFormat(storeName)
+		err := errutil.ErrStateStoreNotFound.
+			WithVars(storeName).
+			WithErrorInfo(errutil.StateStore+errutil.ErrNotFound, nil)
 		log.Debug(err)
-		universalFastHTTPErrorResponder(reqCtx, err)
+		universalFastHTTPStandardizedErrorResponder(reqCtx, err)
 		return nil, "", err
 	}
-	return state, storeName, nil
+	return stateStore, storeName, nil
 }
 
 func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
@@ -1953,9 +1955,12 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	storeName := reqCtx.UserValue(storeNameParam).(string)
 	store, ok := a.universal.CompStore.GetStateStore(storeName)
 	if !ok {
-		err := messages.ErrStateStoreNotFound.WithFormat(storeName)
+		err := errutil.ErrStateStoreNotFound.
+			WithVars(storeName).
+			WithErrorInfo(errutil.StateStore+errutil.ErrNotFound, nil)
+
 		log.Debug(err)
-		universalFastHTTPErrorResponder(reqCtx, err)
+		universalFastHTTPStandardizedErrorResponder(reqCtx, err)
 		return
 	}
 
