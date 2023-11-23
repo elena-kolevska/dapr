@@ -14,7 +14,7 @@ limitations under the License.
 package state
 
 import (
-	"fmt"
+	"github.com/dapr/dapr/pkg/errutil"
 	"os"
 	"strings"
 	"sync"
@@ -127,7 +127,9 @@ func getStateConfiguration(storeName string) *StoreConfiguration {
 
 func checkKeyIllegal(key string) error {
 	if strings.Contains(key, daprSeparator) {
-		return fmt.Errorf("input key/keyPrefix '%s' can't contain '%s'", key, daprSeparator)
+		return errutil.NewErrStateStoreInvalidKeyName(key, daprSeparator).
+			WithErrorInfo(errutil.StateStore+errutil.IllegalKey, nil)
+
 	}
 	return nil
 }

@@ -696,7 +696,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
 	if a.universal.CompStore.StateStoresLen() == 0 {
-		err := messages.ErrStateStoresNotConfigured
+		err := errutil.NewErrStateStoreNotConfigured().WithErrorInfo(errutil.StateStore+errutil.ErrNotConfigured, nil)
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return nil, "", err
@@ -706,8 +706,7 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 
 	stateStore, ok := a.universal.CompStore.GetStateStore(storeName)
 	if !ok {
-		err := errutil.ErrStateStoreNotFound.
-			WithVars(storeName).
+		err := errutil.NewErrStateStoreNotFound(storeName).
 			WithErrorInfo(errutil.StateStore+errutil.ErrNotFound, nil)
 		log.Debug(err)
 		universalFastHTTPStandardizedErrorResponder(reqCtx, err)
@@ -1946,7 +1945,7 @@ type stateTransactionRequestBodyOperation struct {
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if a.universal.CompStore.StateStoresLen() == 0 {
-		err := messages.ErrStateStoresNotConfigured
+		err := errutil.NewErrStateStoreNotConfigured().WithErrorInfo(errutil.StateStore+errutil.ErrNotConfigured, nil)
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return
@@ -1955,8 +1954,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	storeName := reqCtx.UserValue(storeNameParam).(string)
 	store, ok := a.universal.CompStore.GetStateStore(storeName)
 	if !ok {
-		err := errutil.ErrStateStoreNotFound.
-			WithVars(storeName).
+		err := errutil.NewErrStateStoreNotFound(storeName).
 			WithErrorInfo(errutil.StateStore+errutil.ErrNotFound, nil)
 
 		log.Debug(err)
@@ -2045,7 +2043,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
 		max := maxMulti.MultiMaxSize()
 		if max > 0 && len(operations) > max {
-			err := messages.ErrStateTooManyTransactionalOp.WithFormat(len(operations), max)
+			err := errutil.NewErrStateStoreTooManyTransactionalOps(len(operations), max)
 			log.Debug(err)
 			universalFastHTTPErrorResponder(reqCtx, err)
 			return

@@ -23,22 +23,20 @@ import (
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
-	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
 
 func (a *UniversalAPI) GetStateStore(name string) (state.Store, error) {
 	if a.CompStore.StateStoresLen() == 0 {
-		err := messages.ErrStateStoresNotConfigured
+		err := errutil.NewErrStateStoreNotConfigured().WithErrorInfo(errutil.StateStore+errutil.ErrNotConfigured, nil)
 		a.Logger.Debug(err)
 		return nil, err
 	}
 
 	stateStore, ok := a.CompStore.GetStateStore(name)
 	if !ok {
-		err := errutil.ErrStateStoreNotFound.
-			WithVars(name).
+		err := errutil.NewErrStateStoreNotFound(name).
 			WithErrorInfo(errutil.StateStore+errutil.ErrNotFound, nil)
 		a.Logger.Debug(err)
 		return nil, err
@@ -56,20 +54,20 @@ func (a *UniversalAPI) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.Que
 
 	querier, ok := store.(state.Querier)
 	if !ok {
-		err = messages.ErrStateQueryUnsupported
+		err = errutil.NewErrStateStoreQueryUnsupported()
 		a.Logger.Debug(err)
 		return nil, err
 	}
 
 	if encryption.EncryptedStateStore(in.StoreName) {
-		err = messages.ErrStateQueryFailed.WithFormat(in.StoreName, "cannot query encrypted store")
+		err = errutil.NewErrStateStoreQueryFailed(in.StoreName, "cannot query encrypted store")
 		a.Logger.Debug(err)
 		return nil, err
 	}
 
 	var req state.QueryRequest
 	if err = json.Unmarshal([]byte(in.Query), &req.Query); err != nil {
-		err = messages.ErrStateQueryFailed.WithFormat(in.StoreName, "failed to parse JSON query body: "+err.Error())
+		err = errutil.NewErrStateStoreQueryFailed(in.StoreName, "failed to parse JSON query body: "+err.Error())
 		a.Logger.Debug(err)
 		return nil, err
 	}
@@ -88,7 +86,7 @@ func (a *UniversalAPI) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.Que
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.StateQuery, err == nil, elapsed)
 
 	if err != nil {
-		err = messages.ErrStateQueryFailed.WithFormat(in.StoreName, err.Error())
+		err = errutil.NewErrStateStoreQueryFailed(in.StoreName, err.Error())
 		a.Logger.Debug(err)
 		return nil, err
 	}

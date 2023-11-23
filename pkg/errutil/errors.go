@@ -39,6 +39,8 @@ const (
 	ErrNotConfigured = "NOT_CONFIGURED"
 	ErrNameEmpty     = "Name_Empty"
 
+	IllegalKey = "ILLEGAL_KEY"
+
 	// Actor
 
 	// Config
@@ -133,14 +135,5 @@ var (
 	}
 
 	// Secrets
-
-	// State
-	ErrStateStoreNotFound = kitErrors.New(
-		grpcCodes.InvalidArgument,
-		http.StatusBadRequest,
-		"state store %s is not found",
-		"ERR_STATE_STORE_NOT_FOUND",
-	)
-
 	// Workflows
 )
