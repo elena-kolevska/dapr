@@ -696,7 +696,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
 	if a.universal.CompStore.StateStoresLen() == 0 {
-		err := errutil.NewErrStateStoreNotConfigured().WithErrorInfo(errutil.StateStore+errutil.ErrNotConfigured, nil)
+		err := errutil.NewErrStateStoreNotConfigured()
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return nil, "", err
@@ -1945,7 +1945,7 @@ type stateTransactionRequestBodyOperation struct {
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if a.universal.CompStore.StateStoresLen() == 0 {
-		err := errutil.NewErrStateStoreNotConfigured().WithErrorInfo(errutil.StateStore+errutil.ErrNotConfigured, nil)
+		err := errutil.NewErrStateStoreNotConfigured()
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return

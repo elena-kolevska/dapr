@@ -112,4 +112,60 @@ func (b *stateErrors) Run(t *testing.T, ctx context.Context) {
 		require.Nil(t, errInfo.(*errdetails.ErrorInfo).GetMetadata())
 	})
 
+	// Covers errutils.NewErrStateStoreNotConfigured()
+	t.Run("state store not configured", func(t *testing.T) {
+		// Start a new daprd without state store
+		daprdNoStateStore := procdaprd.New(t, procdaprd.WithAppID("daprd_no_state_store"))
+		daprdNoStateStore.Run(t, ctx)
+		daprdNoStateStore.WaitUntilRunning(t, ctx)
+		defer daprdNoStateStore.Cleanup(t)
+
+		connNoStateStore, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", daprdNoStateStore.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, connNoStateStore.Close()) })
+		clientNoStateStore := rtv1.NewDaprClient(connNoStateStore)
+
+		req := &rtv1.SaveStateRequest{
+			StoreName: "mystore",
+			States:    []*commonv1.StateItem{{Value: []byte("value1")}},
+		}
+		_, err = clientNoStateStore.SaveState(ctx, req)
+		require.Error(t, err)
+
+		s, ok := status.FromError(err)
+		require.True(t, ok)
+		require.Equal(t, grpcCodes.FailedPrecondition, s.Code())
+		require.Equal(t, "state store is not configured", s.Message())
+
+		//Check status details
+		require.Equal(t, 1, len(s.Details()))
+		errInfo := s.Details()[0]
+		require.IsType(t, &errdetails.ErrorInfo{}, errInfo)
+		require.Equal(t, "DAPR_STATE_NOT_CONFIGURED", errInfo.(*errdetails.ErrorInfo).GetReason())
+		require.Equal(t, framework.Domain, errInfo.(*errdetails.ErrorInfo).GetDomain())
+		require.Nil(t, errInfo.(*errdetails.ErrorInfo).GetMetadata())
+	})
+
+	// Covers errutils.NewErrStateStoreQueryUnsupported()
+	t.Run("state store doesn't support query", func(t *testing.T) {
+		req := &rtv1.QueryStateRequest{
+			StoreName: "mystore",
+			Query:     "select * from mytable",
+		}
+		_, err = client.QueryStateAlpha1(ctx, req)
+		require.Error(t, err)
+
+		s, ok := status.FromError(err)
+		require.True(t, ok)
+		require.Equal(t, grpcCodes.Internal, s.Code())
+		require.Equal(t, "state store does not support querying", s.Message())
+
+		//Check status details
+		require.Equal(t, 1, len(s.Details()))
+		errInfo := s.Details()[0]
+		require.IsType(t, &errdetails.ErrorInfo{}, errInfo)
+		require.Equal(t, "DAPR_STATE_QUERYING_NOT_SUPPORTED", errInfo.(*errdetails.ErrorInfo).GetReason())
+		require.Equal(t, framework.Domain, errInfo.(*errdetails.ErrorInfo).GetDomain())
+		require.Nil(t, errInfo.(*errdetails.ErrorInfo).GetMetadata())
+	})
 }

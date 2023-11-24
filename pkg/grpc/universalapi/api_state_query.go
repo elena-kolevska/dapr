@@ -29,7 +29,7 @@ import (
 
 func (a *UniversalAPI) GetStateStore(name string) (state.Store, error) {
 	if a.CompStore.StateStoresLen() == 0 {
-		err := errutil.NewErrStateStoreNotConfigured().WithErrorInfo(errutil.StateStore+errutil.ErrNotConfigured, nil)
+		err := errutil.NewErrStateStoreNotConfigured()
 		a.Logger.Debug(err)
 		return nil, err
 	}

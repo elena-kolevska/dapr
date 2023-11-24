@@ -37,6 +37,7 @@ const (
 	// Generic
 	ErrNotFound      = "NOT_FOUND"
 	ErrNotConfigured = "NOT_CONFIGURED"
+	ErrNotSupported  = "NOT_SUPPORTED"
 	ErrNameEmpty     = "Name_Empty"
 
 	IllegalKey = "ILLEGAL_KEY"
