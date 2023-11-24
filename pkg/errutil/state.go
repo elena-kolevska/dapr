@@ -53,7 +53,7 @@ func NewErrStateStoreQueryFailed(storeName string, detail string) *kitErrors.Err
 		http.StatusInternalServerError,
 		fmt.Sprintf("state store %s query failed: %s", storeName, detail),
 		"ERR_STATE_QUERY",
-	)
+	).WithErrorInfo(StateStore+"QUERY_FAILED", nil)
 }
 
 func NewErrStateStoreTooManyTransactionalOps(count int, max int) *kitErrors.Error {
