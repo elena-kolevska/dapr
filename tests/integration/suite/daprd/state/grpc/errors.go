@@ -32,8 +32,6 @@ import (
 	grpcCodes "google.golang.org/grpc/codes"
 )
 
-var i = 0
-
 func init() {
 	suite.Register(new(stateErrors))
 }
@@ -52,7 +50,6 @@ spec:
   type: state.in-memory
   version: v1
 `))
-	i = i + 1
 
 	return []framework.Option{
 		framework.WithProcesses(b.daprd),
