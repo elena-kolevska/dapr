@@ -18,11 +18,12 @@ func NewErrStateStoreNotConfigured() *kitErrors.Error {
 
 func NewErrStateStoreNotFound(storeName string) *kitErrors.Error {
 	return kitErrors.New(
-		grpcCodes.InvalidArgument,
+		grpcCodes.InvalidArgument, // TODO check if it was used in the past, we should change it. It should be grpcCodes.NotFound
 		http.StatusBadRequest,
 		fmt.Sprintf("state store %s is not found", storeName),
 		"ERR_STATE_STORE_NOT_FOUND",
-	)
+	).
+		WithErrorInfo(StateStore+ErrNotFound, nil)
 }
 
 func NewErrStateStoreQueryFailed(storeName string, detail string) *kitErrors.Error {
@@ -57,6 +58,6 @@ func NewErrStateStoreInvalidKeyName(key string, daprSeparator string) *kitErrors
 		grpcCodes.InvalidArgument,
 		http.StatusBadRequest,
 		fmt.Sprintf("input key/keyPrefix '%s' can't contain '%s'", key, daprSeparator),
-		"ERR_STATE_STORE_TOO_MANY_TRANSACTIONS",
-	)
+		"",
+	).WithErrorInfo(StateStore+IllegalKey, nil)
 }

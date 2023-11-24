@@ -127,8 +127,7 @@ func getStateConfiguration(storeName string) *StoreConfiguration {
 
 func checkKeyIllegal(key string) error {
 	if strings.Contains(key, daprSeparator) {
-		return errutil.NewErrStateStoreInvalidKeyName(key, daprSeparator).
-			WithErrorInfo(errutil.StateStore+errutil.IllegalKey, nil)
+		return errutil.NewErrStateStoreInvalidKeyName(key, daprSeparator)
 
 	}
 	return nil

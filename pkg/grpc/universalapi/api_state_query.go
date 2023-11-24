@@ -36,8 +36,7 @@ func (a *UniversalAPI) GetStateStore(name string) (state.Store, error) {
 
 	stateStore, ok := a.CompStore.GetStateStore(name)
 	if !ok {
-		err := errutil.NewErrStateStoreNotFound(name).
-			WithErrorInfo(errutil.StateStore+errutil.ErrNotFound, nil)
+		err := errutil.NewErrStateStoreNotFound(name)
 		a.Logger.Debug(err)
 		return nil, err
 	}
