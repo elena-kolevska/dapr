@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/raft"
-	raftboltdb "github.com/hashicorp/raft-boltdb"
+	raftwal "github.com/hashicorp/raft-wal"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/utils/clock"
 
@@ -64,7 +64,7 @@ type Server struct {
 	raft          *raft.Raft
 	lock          sync.RWMutex
 	raftReady     chan struct{}
-	raftStore     *raftboltdb.BoltStore
+	raftStore     *raftwal.WAL
 	raftTransport *raft.NetworkTransport
 
 	logStore    raft.LogStore
@@ -190,7 +190,7 @@ func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *ra
 		}
 
 		// Create the backend raft store for logs and stable storage.
-		s.raftStore, err = raftboltdb.NewBoltStore(filepath.Join(s.raftStorePath(), "raft.db"))
+		s.raftStore, err = raftwal.Open(filepath.Join(s.raftStorePath()))
 		if err != nil {
 			return err
 		}
