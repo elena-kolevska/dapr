@@ -63,6 +63,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		maxAPILevel:         -1,
 		minAPILevel:         0,
 		metadataEnabled:     false,
+		inMemStoreEnabled:   true,
 	}
 
 	for _, fopt := range fopts {
@@ -80,6 +81,8 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		"--max-api-level=" + strconv.Itoa(opts.maxAPILevel),
 		"--min-api-level=" + strconv.Itoa(opts.minAPILevel),
 		"--metadata-enabled=" + strconv.FormatBool(opts.metadataEnabled),
+		"--inmem-store-enabled=" + strconv.FormatBool(opts.metadataEnabled),
+		"--raft-logstore-path=" + opts.raftLogStorePath,
 	}
 	if opts.sentryAddress != nil {
 		args = append(args, "--sentry-address="+*opts.sentryAddress)

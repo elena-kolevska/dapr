@@ -63,14 +63,11 @@ func (r *rafttest) Setup(t *testing.T) []framework.Option {
 		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2))),
 		placement.WithInitialClusterPorts(fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2)),
 	}
-	fmt.Printf("\n\n\nhttp://localhost:%s/placement/state\n\n", strconv.Itoa(fp.Port(t, 3)))
-	fmt.Printf("\n\n\nhttp://localhost:%s/placement/state\n\n", strconv.Itoa(fp.Port(t, 4)))
-	fmt.Printf("\n\n\nhttp://localhost:%s/placement/state\n\n", strconv.Itoa(fp.Port(t, 5)))
 
 	r.places = []*placement.Placement{
-		placement.New(t, append(opts, placement.WithID("p1"), placement.WithMetadataEnabled(true), placement.WithHealthzPort(fp.Port(t, 3)))...),
-		placement.New(t, append(opts, placement.WithID("p2"), placement.WithMetadataEnabled(true), placement.WithHealthzPort(fp.Port(t, 4)))...),
-		placement.New(t, append(opts, placement.WithID("p3"), placement.WithMetadataEnabled(true), placement.WithHealthzPort(fp.Port(t, 5)))...),
+		placement.New(t, append(opts, placement.WithID("p1"), placement.WithMetadataEnabled(true), placement.WithHealthzPort(fp.Port(t, 3)), placement.WithInMemStoreEnabled(false), placement.WithRaftLogStorePath("/Users/elenakolevska/placement-work/placementlogs-p1"))...),
+		placement.New(t, append(opts, placement.WithID("p2"), placement.WithMetadataEnabled(true), placement.WithHealthzPort(fp.Port(t, 4)), placement.WithInMemStoreEnabled(false), placement.WithRaftLogStorePath("/Users/elenakolevska/placement-work/placementlogs-p2"))...),
+		placement.New(t, append(opts, placement.WithID("p3"), placement.WithMetadataEnabled(true), placement.WithHealthzPort(fp.Port(t, 5)), placement.WithInMemStoreEnabled(false), placement.WithRaftLogStorePath("/Users/elenakolevska/placement-work/placementlogs-p3"))...),
 	}
 
 	fp.Free(t)
@@ -96,13 +93,7 @@ func (r *rafttest) Run(t *testing.T, ctx context.Context) {
 
 	}()
 
-	//var types []string
-	//numTypes := 2
-	//for k := 0; k < numTypes; k++ {
-	//	types = append(types, "myactortype-"+strconv.Itoa(k))
-	//}
-
-	// Bring sidecars up and down 100 times
+	// Bring sidecars up and down 20 times
 	for j := 0; j < 20; j++ {
 		var wg sync.WaitGroup
 		numDaprSidecars := 9
@@ -168,26 +159,12 @@ spec:
 
 				srv.Run(t, ctx)
 
+				fmt.Printf("\n\n\n-------------------Starting Dapr %d-------------------\n", i)
 				daprd.Run(t, ctx)
 				daprd.WaitUntilRunning(t, ctx)
 				daprd.WaitUntilAppHealth(t, ctx)
-				fmt.Printf("\n\n\n-------------------Starting Dapr %d-------------------", i)
 
-				// Check served actor types
-				fmt.Println("\n\n\n-------------------Served actor types:-------------------")
-				actorsUrl := "http://localhost:" + strconv.Itoa(srv.Port()) + "/dapr/config"
-				fmt.Println(actorsUrl)
-				reqA, err := http.NewRequest(http.MethodGet, actorsUrl, nil)
-				require.NoError(t, err)
-
-				respA, err := client.Do(reqA)
-				require.NoError(t, err)
-
-				bodyA, err := io.ReadAll(respA.Body)
-				require.NoError(t, err)
-				fmt.Println(string(bodyA))
-
-				fmt.Println("\n\n\n-------------------Actors response-------------------")
+				fmt.Println("\n\n\n-------------------Calling a method on an actor...-------------------\n")
 				daprdURL := "http://localhost:" + strconv.Itoa(daprd.HTTPPort()) + "/v1.0/actors/" + types[0] + "/myactorid/method/foo"
 
 				req, err := http.NewRequest(http.MethodGet, daprdURL, nil)
@@ -198,7 +175,6 @@ spec:
 
 				body, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
-				fmt.Println("\n\n\n-------------------Actors response-------------------")
 				fmt.Println(string(body))
 				assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -215,13 +191,12 @@ spec:
 				//	assert.NoError(t, resp.Body.Close())
 				//}, time.Second*10, 100*time.Millisecond)
 
-				// Sleep for random number between 0 and 5 seconds
+				// Sleep for random number between 0 and 3 seconds to simulate more random shutdowns
 				time.Sleep(time.Duration(rand.Intn(3)) * time.Second)
 
+				fmt.Printf("\n\n\n-------------------Stopping Dapr %d-------------------\n", i)
 				daprd.Cleanup(t)
 				srv.Cleanup(t)
-
-				fmt.Printf("\n\n\n-------------------Killing Dapr %d-------------------", i)
 
 			}(i)
 		}

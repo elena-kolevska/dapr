@@ -35,6 +35,8 @@ type options struct {
 	maxAPILevel         int
 	minAPILevel         int
 	metadataEnabled     bool
+	inMemStoreEnabled   bool
+	raftLogStorePath    string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -118,5 +120,17 @@ func WithMinAPILevel(val int) Option {
 func WithMetadataEnabled(enabled bool) Option {
 	return func(o *options) {
 		o.metadataEnabled = enabled
+	}
+}
+
+func WithInMemStoreEnabled(enabled bool) Option {
+	return func(o *options) {
+		o.inMemStoreEnabled = enabled
+	}
+}
+
+func WithRaftLogStorePath(path string) Option {
+	return func(o *options) {
+		o.raftLogStorePath = path
 	}
 }
