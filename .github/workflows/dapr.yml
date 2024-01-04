@@ -249,7 +249,7 @@ jobs:
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
-    needs: [unit-tests, integration-tests]
+    needs: [unit-tests]
     env:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
