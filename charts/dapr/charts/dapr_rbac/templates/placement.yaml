@@ -11,7 +11,7 @@ metadata:
 {{- end }}
 ---
 {{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
-{{- if eq .Values.global.rbac.namespaced true }}
+{{- if or (eq .Values.global.rbac.namespaced true) (eq .Values.global.rbac.skipClusterRBAC true) }}
 kind: Role
 {{- else }}
 kind: ClusterRole
@@ -27,7 +27,7 @@ rules: []
 {{- end }}
 ---
 {{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
-{{- if eq .Values.global.rbac.namespaced true }}
+{{- if or (eq .Values.global.rbac.namespaced true) (eq .Values.global.rbac.skipClusterRBAC true) }}
 kind: RoleBinding
 {{- else }}
 kind: ClusterRoleBinding
@@ -45,7 +45,7 @@ subjects:
   namespace: {{ .Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-{{- if eq .Values.global.rbac.namespaced true }}
+{{- if or (eq .Values.global.rbac.namespaced true) (eq .Values.global.rbac.skipClusterRBAC true) }}
   kind: Role
 {{- else }}
   kind: ClusterRole
