@@ -57,6 +57,7 @@ const (
 type Server interface {
 	io.Closer
 	StartNonBlocking() error
+	SetCustomMiddlewareProvider(customMiddlewareProvider func() (grpcGo.UnaryServerInterceptor, grpcGo.StreamServerInterceptor))
 }
 
 type server struct {
@@ -77,6 +78,9 @@ type server struct {
 	wg             sync.WaitGroup
 	closed         atomic.Bool
 	closeCh        chan struct{}
+
+	// diagrid custom
+	customMiddlewareProvider func() (grpcGo.UnaryServerInterceptor, grpcGo.StreamServerInterceptor)
 }
 
 var (
@@ -84,6 +88,10 @@ var (
 	apiServerInfoLogger  = logger.NewLogger("dapr.runtime.grpc.api-info")
 	internalServerLogger = logger.NewLogger("dapr.runtime.grpc.internal")
 )
+
+func (s *server) SetCustomMiddlewareProvider(customMiddlewareProvider func() (grpcGo.UnaryServerInterceptor, grpcGo.StreamServerInterceptor)) {
+	s.customMiddlewareProvider = customMiddlewareProvider
+}
 
 // NewAPIServer returns a new user facing gRPC API server.
 func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy, workflowEngine *wfengine.WorkflowEngine) Server {
@@ -274,6 +282,12 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 
 	if s.config.EnableAPILogging && s.infoLogger != nil {
 		unary, stream := s.getGRPCAPILoggingMiddlewares()
+		intr = append(intr, unary)
+		intrStream = append(intrStream, stream)
+	}
+
+	if s.customMiddlewareProvider != nil {
+		unary, stream := s.customMiddlewareProvider()
 		intr = append(intr, unary)
 		intrStream = append(intrStream, stream)
 	}
