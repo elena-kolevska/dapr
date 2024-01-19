@@ -156,9 +156,18 @@ func (imr *InvokeMethodRequest) WithCustomHTTPMetadata(md map[string]string) *In
 			imr.r.Metadata = make(map[string]*internalv1pb.ListStringValue)
 		}
 
-		// NOTE: We don't explicitly lowercase the keys here but this will be done
+		// NOTE: We don't need to lowercase the keys here because this will be done
 		//       later when attached to the HTTP request as headers.
-		imr.r.Metadata[k] = &internalv1pb.ListStringValue{Values: []string{v}}
+		//       On the other hand, we need to lowercase for comparison, so
+		//       adding the lowercased "key" now will avoid the next ToLower()
+		//       to instantiate a new string.
+		kLower := strings.ToLower(k)
+		if kLower == "content-length" {
+			// We don't let content-length in, avoids overriding the actual request's content-length.
+			return imr
+		}
+
+		imr.r.Metadata[kLower] = &internalv1pb.ListStringValue{Values: []string{v}}
 	}
 
 	return imr
