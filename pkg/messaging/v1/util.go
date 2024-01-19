@@ -512,6 +512,10 @@ func ProtobufToJSON(message protoreflect.ProtoMessage) ([]byte, error) {
 // WithCustomGRPCMetadata applies a metadata map to the outgoing context metadata.
 func WithCustomGRPCMetadata(ctx context.Context, md map[string]string) context.Context {
 	for k, v := range md {
+		if strings.EqualFold(k, "content-length") {
+			continue
+		}
+
 		// Uppercase keys will be converted to lowercase.
 		ctx = metadata.AppendToOutgoingContext(ctx, k, v)
 	}
