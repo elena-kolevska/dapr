@@ -275,6 +275,7 @@ func (o *operator) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			if !enableConversionWebhooks {
+				<-ctx.Done()
 				return nil
 			}
 
@@ -287,6 +288,7 @@ func (o *operator) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			if !enableConversionWebhooks {
+				<-ctx.Done()
 				return nil
 			}
 
@@ -301,11 +303,12 @@ func (o *operator) Run(ctx context.Context) error {
 			}
 
 			for {
-				rErr = o.patchConversionWebhooksInCRDs(ctx, caBundle, o.mgr.GetConfig(), "subscriptions.dapr.io")
-				if rErr != nil {
-					return rErr
+				if enableConversionWebhooks {
+					rErr = o.patchConversionWebhooksInCRDs(ctx, caBundle, o.mgr.GetConfig(), "subscriptions.dapr.io")
+					if rErr != nil {
+						return rErr
+					}
 				}
-
 				healthzServer.Ready()
 
 				select {
