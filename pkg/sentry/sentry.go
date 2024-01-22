@@ -161,6 +161,7 @@ func buildValidators(opts Options) (map[sentryv1pb.SignCertificateRequest_TokenV
 				SentryID:       sentryID,
 				ControlPlaneNS: security.CurrentNamespace(),
 				Healthz:        opts.Healthz,
+				NamespacedRBAC: opts.Config.RBACNamespaced,
 			})
 			if err != nil {
 				return nil, err
