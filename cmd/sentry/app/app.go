@@ -73,6 +73,7 @@ func Run() {
 	cfg.RootCertPath = rootCertPath
 	cfg.TrustDomain = opts.TrustDomain
 	cfg.Port = opts.Port
+	cfg.RBACNamespaced = opts.RBACNamespaced
 
 	var (
 		watchDir    = filepath.Dir(cfg.IssuerCertPath)
