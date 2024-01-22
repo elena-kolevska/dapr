@@ -43,6 +43,7 @@ spec:
     protocol: TCP
 {{- end}}
 ---
+{{- if not .Values.global.operator.disableWebhooks }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -64,3 +65,4 @@ spec:
     protocol: TCP
   selector:
     app: dapr-operator
+{{- end }}
