@@ -138,7 +138,7 @@ func (p *actorPlacement) StatusMessage() string {
 	return "placement: disconnected"
 }
 
-// Register an actor type by adding it to the list of known actor types (if it's not already registered)
+// AddHostedActorType Register an actor type by adding it to the list of known actor types (if it's not already registered)
 // The placement tables will get updated when the next heartbeat fires
 func (p *actorPlacement) AddHostedActorType(actorType string, idleTimeout time.Duration) error {
 	for _, t := range p.actorTypes {
