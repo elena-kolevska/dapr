@@ -54,6 +54,10 @@ type workflowStateMetadata struct {
 	Generation    uint64
 }
 
+type WorkflowStateMetadata struct {
+	workflowStateMetadata `json:",inline"`
+}
+
 func NewWorkflowState(config actorsBackendConfig) *workflowState {
 	return &workflowState{
 		Generation: 1,
