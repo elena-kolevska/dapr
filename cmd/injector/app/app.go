@@ -128,6 +128,7 @@ func Run() {
 			if err != nil {
 				return rerr
 			}
+
 			return inj.Run(ctx,
 				sec.TLSServerConfigNoClientAuth(),
 				sentryID,
