@@ -1010,7 +1010,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	})
 
 	if !hosted {
-		err = status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
+		err = messages.ErrActorInstanceMissing
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1023,7 +1023,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 
 	resp, err := a.Universal.Actors().GetState(ctx, &req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateGet, err))
+		err = messages.ErrActorStateGet.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1087,7 +1087,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 	})
 
 	if !hosted {
-		err = status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
+		err = messages.ErrActorInstanceMissing
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
