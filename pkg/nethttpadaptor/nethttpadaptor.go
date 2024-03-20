@@ -19,6 +19,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/valyala/fasthttp"
@@ -28,6 +29,17 @@ import (
 )
 
 var log = logger.NewLogger("dapr.nethttpadaptor")
+
+var (
+	customCtxKeys []any
+	mu            sync.Mutex
+)
+
+func AddCustomContextKey(key any) {
+	mu.Lock()
+	defer mu.Unlock()
+	customCtxKeys = append(customCtxKeys, key)
+}
 
 // NewNetHTTPHandlerFunc wraps a fasthttp.RequestHandler in a http.HandlerFunc.
 func NewNetHTTPHandlerFunc(h fasthttp.RequestHandler) http.HandlerFunc {
@@ -87,6 +99,13 @@ func NewNetHTTPHandlerFunc(h fasthttp.RequestHandler) http.HandlerFunc {
 		if chiCtx := chi.RouteContext(r.Context()); chiCtx != nil {
 			for i, k := range chiCtx.URLParams.Keys {
 				c.SetUserValueBytes([]byte(k), chiCtx.URLParams.Values[i])
+			}
+		}
+
+		// go through each custom context key and propagate it's value
+		for _, k := range customCtxKeys {
+			if v := r.Context().Value(k); v != nil {
+				c.SetUserValue(k, v)
 			}
 		}
 
