@@ -37,10 +37,11 @@ type Options struct {
 	PlacementAddress string
 	Mode             string
 
-	EtcdID           string
-	EtcdInitialPeers []string
-	EtcdDataDir      string
-	EtcdClientPorts  []string
+	EtcdID              string
+	EtcdInitialPeers    []string
+	EtcdDataDir         string
+	EtcdClientPorts     []string
+	EtcdClientHttpPorts []string
 
 	Logger  logger.Options
 	Metrics *metrics.Options
@@ -83,6 +84,7 @@ func New(origArgs []string) *Options {
 	fs.StringSliceVar(&opts.EtcdInitialPeers, "initial-cluster", []string{"dapr-scheduler-server-0=http://localhost:2380"}, "Initial etcd cluster peers")
 	fs.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
 	fs.StringSliceVar(&opts.EtcdClientPorts, "etcd-client-ports", []string{"dapr-scheduler-server-0=2379"}, "Ports for etcd client communication")
+	fs.StringSliceVar(&opts.EtcdClientHttpPorts, "etcd-client-http-ports", []string{""}, "Ports for etcd client http communication")
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)

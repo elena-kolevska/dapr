@@ -58,6 +58,12 @@ func (s *Server) conf() *embed.Config {
 			Scheme: "http",
 			Host:   fmt.Sprintf("%s:%s", etcdIP, s.etcdClientPorts[s.etcdID]),
 		}}
+		if len(s.etcdClientHttpPorts) > 0 {
+			config.ListenClientHttpUrls = []url.URL{{
+				Scheme: "http",
+				Host:   fmt.Sprintf("%s:%s", etcdIP, s.etcdClientHttpPorts[s.etcdID]),
+			}}
+		}
 	default:
 		config.ListenPeerUrls = []url.URL{{
 			Scheme: "http",
@@ -67,6 +73,12 @@ func (s *Server) conf() *embed.Config {
 			Scheme: "http",
 			Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.etcdID]),
 		}}
+		if len(s.etcdClientHttpPorts) > 0 {
+			config.ListenClientHttpUrls = []url.URL{{
+				Scheme: "http",
+				Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientHttpPorts[s.etcdID]),
+			}}
+		}
 	}
 
 	config.LogLevel = "info" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.

@@ -44,15 +44,16 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server")
 
 type Options struct {
-	AppID            string
-	HostAddress      string
-	ListenAddress    string
-	DataDir          string
-	EtcdID           string
-	EtcdInitialPeers []string
-	EtcdClientPorts  []string
-	Mode             modes.DaprMode
-	Port             int
+	AppID               string
+	HostAddress         string
+	ListenAddress       string
+	DataDir             string
+	EtcdID              string
+	EtcdInitialPeers    []string
+	EtcdClientPorts     []string
+	EtcdClientHttpPorts []string
+	Mode                modes.DaprMode
+	Port                int
 
 	Security security.Handler
 
@@ -66,40 +67,33 @@ type Server struct {
 	listenAddress string
 	mode          modes.DaprMode
 
-	dataDir          string
-	etcdID           string
-	etcdInitialPeers []string
-	etcdClientPorts  map[string]string
-	cron             *etcdcron.Cron
-	readyCh          chan struct{}
+	dataDir             string
+	etcdID              string
+	etcdInitialPeers    []string
+	etcdClientPorts     map[string]string
+	etcdClientHttpPorts map[string]string
+	cron                *etcdcron.Cron
+	readyCh             chan struct{}
 
 	grpcManager  *manager.Manager
 	actorRuntime actors.ActorRuntime
 }
 
 func New(opts Options) *Server {
-	clientPorts := make(map[string]string)
-	for _, input := range opts.EtcdClientPorts {
-		idAndPort := strings.Split(input, "=")
-		if len(idAndPort) != 2 {
-			log.Warnf("Incorrect format for client ports: %s. Should contain <id>=<client-port>", input)
-			continue
-		}
-		schedulerID := strings.TrimSpace(idAndPort[0])
-		port := strings.TrimSpace(idAndPort[1])
-		clientPorts[schedulerID] = port
-	}
+	clientPorts := parseClientPorts(opts.EtcdClientPorts)
+	clientHttpPorts := parseClientPorts(opts.EtcdClientHttpPorts)
 
 	s := &Server{
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
 		mode:          opts.Mode,
 
-		etcdID:           opts.EtcdID,
-		etcdInitialPeers: opts.EtcdInitialPeers,
-		etcdClientPorts:  clientPorts,
-		dataDir:          opts.DataDir,
-		readyCh:          make(chan struct{}),
+		etcdID:              opts.EtcdID,
+		etcdInitialPeers:    opts.EtcdInitialPeers,
+		etcdClientPorts:     clientPorts,
+		etcdClientHttpPorts: clientHttpPorts,
+		dataDir:             opts.DataDir,
+		readyCh:             make(chan struct{}),
 	}
 
 	s.srv = grpc.NewServer(opts.Security.GRPCServerOptionMTLS())
@@ -139,6 +133,23 @@ func New(opts Options) *Server {
 		s.actorRuntime = act
 	}
 	return s
+}
+
+func parseClientPorts(opts []string) map[string]string {
+	ports := make(map[string]string)
+
+	for _, input := range opts {
+		idAndPort := strings.Split(input, "=")
+		if len(idAndPort) != 2 {
+			log.Warnf("Incorrect format for client http ports: %s. Should contain <id>=<client-port>", input)
+			continue
+		}
+		schedulerID := strings.TrimSpace(idAndPort[0])
+		port := strings.TrimSpace(idAndPort[1])
+		ports[schedulerID] = port
+	}
+
+	return ports
 }
 
 func (s *Server) Run(ctx context.Context) error {
