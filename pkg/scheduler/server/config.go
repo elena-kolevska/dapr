@@ -28,7 +28,7 @@ func (s *Server) conf() *embed.Config {
 	config := embed.NewConfig()
 
 	config.Name = s.etcdID
-	config.Dir = s.dataDir
+	config.Dir = s.dataDir + "-" + s.etcdID
 	config.InitialCluster = strings.Join(s.etcdInitialPeers, ",")
 
 	etcdURL, peerPort, err := peerHostAndPort(s.etcdID, s.etcdInitialPeers)
