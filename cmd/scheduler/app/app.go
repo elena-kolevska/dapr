@@ -91,6 +91,7 @@ func Run() {
 				EtcdInitialPeers:    opts.EtcdInitialPeers,
 				EtcdClientPorts:     opts.EtcdClientPorts,
 				EtcdClientHttpPorts: opts.EtcdClientHttpPorts,
+				EtcdSpaceQuota:      opts.EtcdSpaceQuota,
 				Port:                opts.Port,
 				Security:            secHandler,
 				PlacementAddress:    opts.PlacementAddress,

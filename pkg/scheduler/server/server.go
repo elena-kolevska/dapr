@@ -52,6 +52,7 @@ type Options struct {
 	EtcdInitialPeers    []string
 	EtcdClientPorts     []string
 	EtcdClientHttpPorts []string
+	EtcdSpaceQuota      int64
 	Mode                modes.DaprMode
 	Port                int
 
@@ -72,6 +73,7 @@ type Server struct {
 	etcdInitialPeers    []string
 	etcdClientPorts     map[string]string
 	etcdClientHttpPorts map[string]string
+	etcdSpaceQuota      int64
 	cron                *etcdcron.Cron
 	readyCh             chan struct{}
 
@@ -92,6 +94,7 @@ func New(opts Options) *Server {
 		etcdInitialPeers:    opts.EtcdInitialPeers,
 		etcdClientPorts:     clientPorts,
 		etcdClientHttpPorts: clientHttpPorts,
+		etcdSpaceQuota:      opts.EtcdSpaceQuota,
 		dataDir:             opts.DataDir,
 		readyCh:             make(chan struct{}),
 	}

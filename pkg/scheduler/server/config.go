@@ -30,6 +30,7 @@ func (s *Server) conf() *embed.Config {
 	config.Name = s.etcdID
 	config.Dir = s.dataDir + "-" + s.etcdID
 	config.InitialCluster = strings.Join(s.etcdInitialPeers, ",")
+	config.QuotaBackendBytes = s.etcdSpaceQuota
 
 	etcdURL, peerPort, err := peerHostAndPort(s.etcdID, s.etcdInitialPeers)
 	if err != nil {
