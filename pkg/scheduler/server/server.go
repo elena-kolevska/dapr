@@ -44,17 +44,19 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server")
 
 type Options struct {
-	AppID               string
-	HostAddress         string
-	ListenAddress       string
-	DataDir             string
-	EtcdID              string
-	EtcdInitialPeers    []string
-	EtcdClientPorts     []string
-	EtcdClientHttpPorts []string
-	EtcdSpaceQuota      int64
-	Mode                modes.DaprMode
-	Port                int
+	AppID                   string
+	HostAddress             string
+	ListenAddress           string
+	DataDir                 string
+	EtcdID                  string
+	EtcdInitialPeers        []string
+	EtcdClientPorts         []string
+	EtcdClientHttpPorts     []string
+	EtcdSpaceQuota          int64
+	EtcdCompactionMode      string
+	EtcdCompactionRetention string
+	Mode                    modes.DaprMode
+	Port                    int
 
 	Security security.Handler
 
@@ -68,14 +70,16 @@ type Server struct {
 	listenAddress string
 	mode          modes.DaprMode
 
-	dataDir             string
-	etcdID              string
-	etcdInitialPeers    []string
-	etcdClientPorts     map[string]string
-	etcdClientHttpPorts map[string]string
-	etcdSpaceQuota      int64
-	cron                *etcdcron.Cron
-	readyCh             chan struct{}
+	dataDir                 string
+	etcdID                  string
+	etcdInitialPeers        []string
+	etcdClientPorts         map[string]string
+	etcdClientHttpPorts     map[string]string
+	etcdSpaceQuota          int64
+	etcdCompactionMode      string
+	etcdCompactionRetention string
+	cron                    *etcdcron.Cron
+	readyCh                 chan struct{}
 
 	grpcManager  *manager.Manager
 	actorRuntime actors.ActorRuntime
@@ -90,13 +94,15 @@ func New(opts Options) *Server {
 		listenAddress: opts.ListenAddress,
 		mode:          opts.Mode,
 
-		etcdID:              opts.EtcdID,
-		etcdInitialPeers:    opts.EtcdInitialPeers,
-		etcdClientPorts:     clientPorts,
-		etcdClientHttpPorts: clientHttpPorts,
-		etcdSpaceQuota:      opts.EtcdSpaceQuota,
-		dataDir:             opts.DataDir,
-		readyCh:             make(chan struct{}),
+		etcdID:                  opts.EtcdID,
+		etcdInitialPeers:        opts.EtcdInitialPeers,
+		etcdClientPorts:         clientPorts,
+		etcdClientHttpPorts:     clientHttpPorts,
+		etcdSpaceQuota:          opts.EtcdSpaceQuota,
+		etcdCompactionMode:      opts.EtcdCompactionMode,
+		etcdCompactionRetention: opts.EtcdCompactionRetention,
+		dataDir:                 opts.DataDir,
+		readyCh:                 make(chan struct{}),
 	}
 
 	s.srv = grpc.NewServer(opts.Security.GRPCServerOptionMTLS())
