@@ -22,19 +22,20 @@ import (
 	"go.etcd.io/etcd/server/v3/embed"
 
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/security"
 )
 
 func (s *Server) conf() *embed.Config {
 	config := embed.NewConfig()
 
-	config.Name = s.etcdID
-	config.Dir = s.dataDir + "-" + s.etcdID
+	config.Name = s.id
+	config.Dir = s.dataDir + "-" + security.CurrentNamespace() + "-" + s.id
 	config.InitialCluster = strings.Join(s.etcdInitialPeers, ",")
 	config.QuotaBackendBytes = s.etcdSpaceQuota
 	config.AutoCompactionMode = s.etcdCompactionMode
 	config.AutoCompactionRetention = s.etcdCompactionRetention
 
-	etcdURL, peerPort, err := peerHostAndPort(s.etcdID, s.etcdInitialPeers)
+	etcdURL, peerPort, err := peerHostAndPort(s.id, s.etcdInitialPeers)
 	if err != nil {
 		log.Warnf("Invalid format for initial cluster. Make sure to include 'http://' in Scheduler URL")
 	}
@@ -46,7 +47,7 @@ func (s *Server) conf() *embed.Config {
 
 	config.AdvertiseClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.etcdID]),
+		Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.id]),
 	}}
 
 	switch s.mode {
@@ -59,12 +60,12 @@ func (s *Server) conf() *embed.Config {
 		}}
 		config.ListenClientUrls = []url.URL{{
 			Scheme: "http",
-			Host:   fmt.Sprintf("%s:%s", etcdIP, s.etcdClientPorts[s.etcdID]),
+			Host:   fmt.Sprintf("%s:%s", etcdIP, s.etcdClientPorts[s.id]),
 		}}
 		if len(s.etcdClientHttpPorts) > 0 {
 			config.ListenClientHttpUrls = []url.URL{{
 				Scheme: "http",
-				Host:   fmt.Sprintf("%s:%s", etcdIP, s.etcdClientHttpPorts[s.etcdID]),
+				Host:   fmt.Sprintf("%s:%s", etcdIP, s.etcdClientHttpPorts[s.id]),
 			}}
 		}
 	default:
@@ -74,12 +75,12 @@ func (s *Server) conf() *embed.Config {
 		}}
 		config.ListenClientUrls = []url.URL{{
 			Scheme: "http",
-			Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.etcdID]),
+			Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.id]),
 		}}
 		if len(s.etcdClientHttpPorts) > 0 {
 			config.ListenClientHttpUrls = []url.URL{{
 				Scheme: "http",
-				Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientHttpPorts[s.etcdID]),
+				Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientHttpPorts[s.id]),
 			}}
 		}
 	}

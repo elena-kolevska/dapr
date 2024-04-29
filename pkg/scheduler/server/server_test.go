@@ -54,7 +54,7 @@ func TestServerConf(t *testing.T) {
 	t.Run("KubernetesMode", func(t *testing.T) {
 		s := &Server{
 			mode:                modes.KubernetesMode,
-			etcdID:              "id2",
+			id:                  "id2",
 			etcdClientPorts:     map[string]string{"id1": "5001", "id2": "5002"},
 			etcdClientHttpPorts: map[string]string{"id1": "5003", "id2": "5004"},
 			etcdInitialPeers:    []string{"id1=http://localhost:5001", "id2=http://localhost:5002"},
@@ -82,7 +82,7 @@ func TestServerConf(t *testing.T) {
 	t.Run("DefaultMode", func(t *testing.T) {
 		s := &Server{
 			mode:                modes.StandaloneMode,
-			etcdID:              "id2",
+			id:                  "id2",
 			dataDir:             "./data",
 			etcdClientPorts:     map[string]string{"id1": "5001", "id2": "5002"},
 			etcdClientHttpPorts: map[string]string{"id1": "5003", "id2": "5004"},
@@ -92,7 +92,7 @@ func TestServerConf(t *testing.T) {
 		config := s.conf()
 
 		assert.Equal(t, "id1=http://localhost:5001,id2=http://localhost:5002", config.InitialCluster)
-		assert.Equal(t, "./data-id2", config.Dir)
+		assert.Equal(t, "./data-default-id2", config.Dir)
 
 		clientUrl := url.URL{
 			Scheme: "http",
@@ -112,7 +112,7 @@ func TestServerConf(t *testing.T) {
 	t.Run("DefaultMode without client http ports", func(t *testing.T) {
 		s := &Server{
 			mode:             modes.StandaloneMode,
-			etcdID:           "id2",
+			id:               "id2",
 			etcdClientPorts:  map[string]string{"id1": "5001", "id2": "5002"},
 			etcdInitialPeers: []string{"id1=http://localhost:5001", "id2=http://localhost:5002"},
 		}

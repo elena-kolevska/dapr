@@ -54,7 +54,7 @@ type Options struct {
 	Security         security.Handler
 
 	DataDir                 string
-	EtcdID                  string
+	Id                      string
 	EtcdInitialPeers        []string
 	EtcdClientPorts         []string
 	EtcdClientHttpPorts     []string
@@ -71,7 +71,7 @@ type Server struct {
 	mode          modes.DaprMode
 
 	dataDir                 string
-	etcdID                  string
+	id                      string
 	etcdInitialPeers        []string
 	etcdClientPorts         map[string]string
 	etcdClientHttpPorts     map[string]string
@@ -100,7 +100,7 @@ func New(opts Options) *Server {
 		listenAddress: opts.ListenAddress,
 		mode:          opts.Mode,
 
-		etcdID:                  opts.EtcdID,
+		id:                      opts.Id,
 		etcdInitialPeers:        opts.EtcdInitialPeers,
 		etcdClientPorts:         clientPorts,
 		etcdClientHttpPorts:     clientHttpPorts,

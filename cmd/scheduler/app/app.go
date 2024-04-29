@@ -92,7 +92,7 @@ func Run() {
 				Security:         secHandler,
 
 				DataDir:                 opts.EtcdDataDir,
-				EtcdID:                  opts.EtcdID,
+				Id:                      opts.Id,
 				EtcdInitialPeers:        opts.EtcdInitialPeers,
 				EtcdClientPorts:         opts.EtcdClientPorts,
 				EtcdClientHttpPorts:     opts.EtcdClientHttpPorts,
