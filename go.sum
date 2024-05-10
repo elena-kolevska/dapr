@@ -441,6 +441,7 @@ github.com/dapr/components-contrib v1.13.0-rc.2.0.20240503231149-1f46231d875c h1
 github.com/dapr/components-contrib v1.13.0-rc.2.0.20240503231149-1f46231d875c/go.mod h1:8/+3UcZLcNytOKLXPpseDT3gB0Mo4ryoMaiud+9u60k=
 github.com/dapr/components-contrib v1.13.0-rc.4/go.mod h1:2vqGUxoK1BUkurXVzl61958wCGydbftK4eQP0rudMSQ=
 github.com/dapr/components-contrib v1.13.0-rc.10/go.mod h1:CFCvUwS2ClqTVyzfqHEGiXM3gftWOjOI73pxECoY/Iw=
+github.com/dapr/components-contrib v1.13.1/go.mod h1:CFCvUwS2ClqTVyzfqHEGiXM3gftWOjOI73pxECoY/Iw=
 github.com/dapr/kit v0.13.1-0.20240415171926-a3f906d60908 h1:8Bs9nVJh00BVNJxsB5Djf0xICW53kiKi3QL/jZ5qp8s=
 github.com/dapr/kit v0.13.1-0.20240415171926-a3f906d60908/go.mod h1:LkPZyrSpa2xLBgYMwUhDbWZcZVt/WdL7FSPlN0PrSog=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
