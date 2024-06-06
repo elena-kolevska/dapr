@@ -20,7 +20,7 @@ import sys
 import datetime
 
 gitRef = os.getenv("GITHUB_REF")
-tagRefPrefix = "refs/tags/v"
+tagRefPrefix = "refs/tags/official"
 
 with open(os.getenv("GITHUB_ENV"), "a") as githubEnv:
 
