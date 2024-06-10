@@ -83,12 +83,7 @@ func Test_Disk(t *testing.T) {
 	}()
 	t.Cleanup(func() {
 		cancel()
-		select {
-		case err = <-errCh:
-			require.NoError(t, err)
-		case <-time.After(time.Second):
-			assert.Fail(t, "expected to receive error")
-		}
+		require.NoError(t, <-errCh)
 	})
 
 	assert.Empty(t, store.ListComponents())

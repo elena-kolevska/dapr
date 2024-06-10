@@ -35,11 +35,6 @@ type StreamConn[T differ.Resource] struct {
 	ReconcileCh chan struct{}
 }
 
-type StreamConn[T differ.Resource] struct {
-	EventCh     chan *Event[T]
-	ReconcileCh chan struct{}
-}
-
 // Loader is an interface for loading and watching for changes to a resource
 // from a source.
 type Loader[T differ.Resource] interface {

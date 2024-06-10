@@ -148,7 +148,8 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.operator1.Cleanup(t)
 	c.store.Set(&comp)
 	c.operator2.Run(t, ctx)
-	c.operator2.WaitUntilRunning(t, ctx)
+	t.Cleanup(func() { c.operator2.Cleanup(t) })
+	c.perator2.WaitUntilRunning(t, ctx)
 	c.store.Set(&comp)
 	c.kubeapi.Informer().Modify(t, &comp)
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
