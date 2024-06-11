@@ -219,10 +219,6 @@ func (k *kubernetes) expectedID(pod *corev1.Pod) (string, bool, error) {
 	appID, appOK := pod.Annotations[annotations.KeyAppID]
 
 	if ctrlOK {
-		if pod.Namespace != k.controlPlaneNS {
-			return "", false, fmt.Errorf("control plane service in namespace '%s' is not allowed", pod.Namespace)
-		}
-
 		if !isControlPlaneService(ctrlPlane) {
 			return "", false, fmt.Errorf("unknown control plane service '%s'", pod.Name)
 		}
