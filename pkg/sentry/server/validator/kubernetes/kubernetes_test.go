@@ -820,8 +820,10 @@ func TestValidate(t *testing.T) {
 					},
 				},
 			},
-			expErr: true,
-			expTD:  spiffeid.TrustDomain{},
+			// TODO: revert this when we have dapr-operator
+			// and dapr-sentry back in the same namespace
+			expErr: false,
+			expTD:  spiffeid.RequireTrustDomainFromString("cluster.local"),
 		},
 		"should error if the control plane component is not known": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
