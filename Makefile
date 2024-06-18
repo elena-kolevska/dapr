@@ -208,6 +208,27 @@ ifneq ($(GOOS), linux)
 $(foreach ITEM,$(BINARIES),$(eval $(call genBinariesForTarget,$(ITEM),./cmd/$(ITEM),linux,$(GOARCH),$(DAPR_LINUX_OUT_DIR))))
 endif
 
+# This is like cloudgrid's "make iter" but for dapr services.
+# By default it updates the deployments in root-dapr-system, you can target a project namespace like:
+# make iter-placement NAMESPACE=prj-XX
+# $1: binary name
+# $2: deployment
+NAMESPACE ?= root-dapr-system
+define genIterForTarget
+.PHONY: iter-$1
+iter-$1:
+	$(eval GOVER:=$(shell grep "^go " go.mod | sed 's/go //'))
+	make build-linux GOARCH=amd64 GOTOOLCHAIN=go$(GOVER) GOVER=$(GOVER) GOOS=linux
+	docker build --load -t $1:iter -f docker/Dockerfile --build-arg PKG_FILES=$1 dist/linux_amd64/release
+	kind load docker-image $1:iter --name $(shell onebox dev status | jq -r .clusters.catalystDataplaneKubernetes.clusterName)
+	kubectl --namespace $(NAMESPACE) patch deployment/$2 -p '{"spec": {"template": {"spec": {"containers": [{"name": "$2", "imagePullPolicy": "Never", "image": "$1:iter"}]}}}}' --context=$(shell onebox dev status | jq -r .clusters.catalystDataplaneKubernetes.contextName)
+	kubectl --namespace $(NAMESPACE) --context=$(shell onebox dev status | jq -r .clusters.catalystDataplaneKubernetes.contextName) rollout restart deployment $2
+endef
+
+$(eval $(call genIterForTarget,operator,dapr-operator))
+$(eval $(call genIterForTarget,sentry,dapr-sentry))
+$(eval $(call genIterForTarget,placement,dapr-placement))
+
 ################################################################################
 # Target: archive                                                              #
 ################################################################################
