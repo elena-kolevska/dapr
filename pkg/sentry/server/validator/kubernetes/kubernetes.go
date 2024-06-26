@@ -242,6 +242,19 @@ func (k *kubernetes) expectedID(pod *corev1.Pod) (string, bool, error) {
 // If successful, returns the username of the token, split by the Kubernetes
 // ':' separator.
 func (k *kubernetes) executeTokenReview(ctx context.Context, token string, audiences ...string) ([]string, error) {
+	// TODO: This is temporary. While we use a shared dapr-sentry but a
+	// per-project dapr-operator, the operator will be requesting certificates
+	// using the project's spiffe ID but sentry will only accept the root
+	// spiffe ID. By doing this we still validate that the token is properly
+	// signed, but we accept any audience.
+	// This is a workaround because Helm wouldn't let us do it cleanly.
+	tok, err := jwt.Parse([]byte(token), jwt.WithVerify(false))
+	if err != nil {
+		log.Warnf("error parsing signing token: %v", err)
+	} else {
+		audiences = append(audiences, tok.Audience()...)
+	}
+
 	review, err := k.auth.TokenReviews().Create(ctx, &kauthapi.TokenReview{
 		Spec: kauthapi.TokenReviewSpec{Token: token, Audiences: audiences},
 	}, metav1.CreateOptions{})
