@@ -1,3 +1,4 @@
+{{- if eq .Values.enabled true }}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -14,6 +15,7 @@ data:
   issuer.key: {{ b64enc .Values.tls.issuer.keyPEM | trim }}
   ca.crt: {{ b64enc .Values.tls.root.certPEM | trim }}
 {{ end }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
