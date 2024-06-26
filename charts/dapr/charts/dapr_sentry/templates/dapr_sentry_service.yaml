@@ -1,3 +1,4 @@
+{{- if eq .Values.enabled true }}
 kind: Service
 apiVersion: v1
 metadata:
@@ -19,3 +20,4 @@ spec:
     port: {{ .Values.ports.port }}
     targetPort: {{ .Values.ports.targetPort }}
     name: grpc
+{{- end }}
