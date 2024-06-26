@@ -80,6 +80,7 @@ func (s *sentry) Start(parentCtx context.Context) error {
 	provider, err := security.New(ctx, security.Options{
 		ControlPlaneTrustDomain: s.conf.TrustDomain,
 		ControlPlaneNamespace:   ns,
+		NamespacedRBAC:          s.conf.RBACNamespaced,
 		AppID:                   "dapr-sentry",
 		TrustAnchors:            camngr.TrustAnchors(),
 		MTLSEnabled:             true,
