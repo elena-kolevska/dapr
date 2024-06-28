@@ -345,7 +345,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatusServer) (*spiffe.Parsed, error) {
 	sec, err := p.sec.Handler(stream.Context())
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "")
+		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 
 	if !sec.MTLSEnabled() {
