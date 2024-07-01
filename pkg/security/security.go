@@ -70,6 +70,9 @@ type Provider interface {
 
 // Options are the options for the security authenticator.
 type Options struct {
+	// Diagrid custom field
+	NamespacedRBAC bool
+
 	// SentryAddress is the network address of the sentry server.
 	SentryAddress string
 
