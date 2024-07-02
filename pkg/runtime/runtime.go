@@ -745,6 +745,13 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
 			actorRuntime = a.actor
 		}
 		abe.SetActorRuntime(ctx, actorRuntime)
+
+		if a.runtimeConfig.ActorsEnabled() {
+			err := a.workflowEngine.Start(ctx)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	reg := a.runtimeConfig.registry.Workflows()
