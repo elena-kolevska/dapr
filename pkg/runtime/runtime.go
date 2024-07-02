@@ -568,7 +568,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	// Creating workflow engine after components are loaded
 	wfe := wfengine.NewWorkflowEngine(a.runtimeConfig.id, a.globalConfig.GetWorkflowSpec(), a.processor.WorkflowBackend())
-	wfe.ConfigureGrpcExecutor()
+	wfe.ConfigureGrpcExecutor(ctx)
 	a.workflowEngine = wfe
 
 	err = a.loadHTTPEndpoints(ctx)

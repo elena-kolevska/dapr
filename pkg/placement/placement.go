@@ -293,12 +293,12 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			}
 
 			// Ensure that the incoming runtime is actor instance.
-			isActorRuntime = len(req.GetEntities()) > 0
-			if !isActorRuntime {
+			if len(req.GetEntities()) == 0 && !p.raftNode.FSM().State().HasMember(namespace, req) {
 				// we already disseminated the existing tables to this member,
 				// so we can ignore the rest if it's a non-actor.
 				continue
 			}
+			isActorRuntime = true
 
 			now := p.clock.Now()
 
