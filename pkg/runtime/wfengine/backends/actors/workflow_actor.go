@@ -35,28 +35,31 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 const (
-	CallbackChannelProperty = "dapr.callback"
+	// CallbackChannelProperty = "dapr.callback"
 
-	CreateWorkflowInstanceMethod = "CreateWorkflowInstance"
-	GetWorkflowMetadataMethod    = "GetWorkflowMetadata"
-	AddWorkflowEventMethod       = "AddWorkflowEvent"
-	PurgeWorkflowStateMethod     = "PurgeWorkflowState"
-	GetWorkflowStateMethod       = "GetWorkflowState"
+	CreateWorkflowInstanceMethod      = "CreateWorkflowInstance"
+	GetWorkflowMetadataMethod         = "GetWorkflowMetadata"
+	AddWorkflowEventMethod            = "AddWorkflowEvent"
+	PurgeWorkflowStateMethod          = "PurgeWorkflowState"
+	GetWorkflowStateMethod            = "GetWorkflowState"
+	CompletePendingOrchestratorMethod = "CompletePendingOrchestrator"
 )
 
 type workflowActor struct {
-	actorID               string
-	actors                actors.Actors
-	state                 *workflowState
-	scheduler             workflowScheduler
-	cachingDisabled       bool
-	defaultTimeout        time.Duration
-	reminderInterval      time.Duration
-	config                actorsBackendConfig
-	activityResultAwaited atomic.Bool
+	actorID                       string
+	actors                        actors.Actors
+	state                         *workflowState
+	scheduler                     workflowScheduler
+	cachingDisabled               bool
+	defaultTimeout                time.Duration
+	reminderInterval              time.Duration
+	config                        actorsBackendConfig
+	activityResultAwaited         atomic.Bool
+	onPendingOrchestratorResponse onPendingOrchestratorResponse
 }
 
 type durableTimer struct {
@@ -73,8 +76,15 @@ type CreateWorkflowInstanceRequest struct {
 	StartEventBytes []byte                          `json:"startEventBytes"`
 }
 
+type workflowResult struct {
+	Success      bool
+	RuntimeState *backend.SerializableOrchestrationRuntimeState
+}
+
 // workflowScheduler is a func interface for pushing workflow (orchestration) work items into the backend
 type workflowScheduler func(ctx context.Context, wi *backend.OrchestrationWorkItem) error
+
+type onPendingOrchestratorResponse func(*backend.OrchestratorResponse) error
 
 func NewDurableTimer(bytes []byte, generation uint64) durableTimer {
 	return durableTimer{bytes, generation}
@@ -94,16 +104,17 @@ type workflowActorOpts struct {
 	reminderInterval time.Duration
 }
 
-func NewWorkflowActor(scheduler workflowScheduler, config actorsBackendConfig, opts *workflowActorOpts) actors.InternalActorFactory {
+func NewWorkflowActor(scheduler workflowScheduler, onPendingOrchestratorResponse onPendingOrchestratorResponse, config actorsBackendConfig, opts *workflowActorOpts) actors.InternalActorFactory {
 	return func(actorType string, actorID string, actors actors.Actors) actors.InternalActor {
 		wf := &workflowActor{
-			actorID:          actorID,
-			actors:           actors,
-			scheduler:        scheduler,
-			defaultTimeout:   30 * time.Second,
-			reminderInterval: 1 * time.Minute,
-			config:           config,
-			cachingDisabled:  opts.cachingDisabled,
+			actorID:                       actorID,
+			actors:                        actors,
+			scheduler:                     scheduler,
+			onPendingOrchestratorResponse: onPendingOrchestratorResponse,
+			defaultTimeout:                30 * time.Second,
+			reminderInterval:              1 * time.Minute,
+			config:                        config,
+			cachingDisabled:               opts.cachingDisabled,
 		}
 
 		if opts.defaultTimeout > 0 {
@@ -118,12 +129,12 @@ func NewWorkflowActor(scheduler workflowScheduler, config actorsBackendConfig, o
 }
 
 // InvokeMethod implements actors.InternalActor
-func (wf *workflowActor) InvokeMethod(ctx context.Context, methodName string, request []byte, metadata map[string][]string) (res []byte, err error) {
-	wfLogger.Debugf("Workflow actor '%s': invoking method '%s'", wf.actorID, methodName)
+func (wf *workflowActor) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest, metadata map[string][]string) (res []byte, err error) {
+	wfLogger.Debugf("Workflow actor '%s': invoking method '%s'", wf.actorID, req.GetMessage().GetMethod())
 
-	switch methodName {
+	switch req.GetMessage().GetMethod() {
 	case CreateWorkflowInstanceMethod:
-		err = wf.createWorkflowInstance(ctx, request)
+		err = wf.createWorkflowInstance(ctx, req.GetMessage().GetData().GetValue())
 	case GetWorkflowMetadataMethod:
 		var resAny any
 		resAny, err = wf.getWorkflowMetadata(ctx)
@@ -137,14 +148,28 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, methodName string, re
 			res, err = state.EncodeWorkflowState()
 		}
 	case AddWorkflowEventMethod:
-		err = wf.addWorkflowEvent(ctx, request)
+		err = wf.addWorkflowEvent(ctx, req.GetMessage().GetData().GetValue())
 	case PurgeWorkflowStateMethod:
 		err = wf.purgeWorkflowState(ctx)
+	case CompletePendingOrchestratorMethod:
+		err = wf.executeOnPendingOrchestrator(req.GetMessage().GetData().GetValue())
 	default:
-		err = fmt.Errorf("no such method: %s", methodName)
+		err = fmt.Errorf("no such method: %s", req.GetMessage().GetMethod())
 	}
 
 	return res, err
+}
+
+func (wf *workflowActor) executeOnPendingOrchestrator(response []byte) error {
+	res, err := backend.UnmarshalOrchestratorResponse(response)
+	if err != nil {
+		err = fmt.Errorf("error decoding proto orchestrator response %w", err)
+	}
+	err = wf.onPendingOrchestratorResponse(res)
+	if err != nil {
+		return fmt.Errorf("error on pending orchestrator response callback %w", err)
+	}
+	return nil
 }
 
 // InvokeReminder implements actors.InternalActor
@@ -169,10 +194,10 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.Int
 		wfLogger.Warnf("Workflow actor '%s': execution was canceled (process shutdown?) and will be retried later: '%v'", wf.actorID, err)
 		return nil
 	case errors.As(err, &re):
-		wfLogger.Warnf("Workflow actor '%s': execution failed with a recoverable error and will be retried later: '%v'", wf.actorID, re)
+		wfLogger.Warnf("Workflow actor '%s' %s: execution failed with a recoverable error and will be retried later: '%v'", wf.actorID, reminder.Name, re)
 		return nil
 	default: // Other error
-		wfLogger.Errorf("Workflow actor '%s': execution failed with a non-recoverable error: %v", wf.actorID, err)
+		wfLogger.Errorf("Workflow actor '%s' %s: execution failed with a non-recoverable error: %v", wf.actorID, reminder.Name, err)
 		return actors.ErrReminderCanceled
 	}
 }
@@ -352,7 +377,7 @@ func (wf *workflowActor) getWorkflowMetadata(ctx context.Context) (*api.Orchestr
 
 func (wf *workflowActor) getWorkflowState(ctx context.Context) (*workflowState, error) {
 	state, err := wf.loadInternalState(ctx)
-	wfLogger.Errorf("Workflow actor '%s': getWorkflowState, state: %s", wf.actorID, state)
+	wfLogger.Debugf("Workflow actor '%s': getWorkflowState", wf.actorID)
 	if err != nil {
 		return nil, err
 	}
@@ -443,6 +468,10 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 		}
 	}
 
+	if reminder.Name == "start-sync" {
+		return wf.runStartWorkflowSync(ctx, reminder, state)
+	}
+
 	if len(state.Inbox) == 0 {
 		// This can happen after multiple events are processed in batches; there may still be reminders around
 		// for some of those already processed events.
@@ -452,7 +481,6 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
 	transactionalRequests := make(map[string][]actors.TransactionalOperation)
-	var esHistoryEvent *backend.HistoryEvent
 
 	for _, e := range state.Inbox {
 		var taskID int32
@@ -461,9 +489,6 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 		} else if tf := e.GetTaskFailed(); tf != nil {
 			taskID = tf.GetTaskScheduledId()
 		} else {
-			if es := e.GetExecutionStarted(); es != nil {
-				esHistoryEvent = e
-			}
 			continue
 		}
 		op := actors.TransactionalOperation{
@@ -497,30 +522,64 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 		NewEvents:  state.Inbox,
 		RetryCount: -1, // TODO
 		State:      runtimeState,
-		Properties: make(map[string]any, 1),
+		// Properties: make(map[string]any, 1),
 	}
 
-	// Executing workflow code is a one-way operation. We must wait for the app code to report its completion, which
-	// will trigger this callback channel.
-	callback := make(chan bool)
-	wi.Properties[CallbackChannelProperty] = callback
-	// Setting executionStatus to failed by default to record metrics for non-recoverable errors.
+	// Request to execute workflow
+	wfLogger.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", wf.actorID, wi.InstanceID)
+	// Schedule the workflow execution by signaling the backend
+	scheduleCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	err = wf.scheduler(scheduleCtx, wi)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return newRecoverableError(fmt.Errorf("timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running: %w", err))
+		}
+		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
+	}
+
+	dataEnc, err := json.Marshal(workflowResult{
+		Success:      false,
+		RuntimeState: backend.ConvertToSerializableRuntimeState(runtimeState),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to encode data as JSON: %w", err)
+	}
+	return wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
+		ActorType: wf.config.workflowActorType,
+		ActorID:   wf.actorID,
+		Data:      dataEnc,
+		DueTime:   wf.defaultTimeout.String(),
+		Name:      "start-sync",
+		Period:    wf.reminderInterval.String(),
+	})
+}
+
+func (wf *workflowActor) runStartWorkflowSync(ctx context.Context, reminder actors.InternalActorReminder, state *workflowState) (err error) {
+
+	var wfResult workflowResult
+	err = json.Unmarshal(reminder.Data, &wfResult)
+	if err != nil {
+		wfLogger.Errorf("error unmarshaling result json %v", err)
+		return err
+	}
+	runtimeState := backend.ConvertFromSerializableRuntimeState(wfResult.RuntimeState)
+
 	executionStatus := diag.StatusFailed
 	if runtimeState.IsCompleted() {
 		// If workflow is already completed, set executionStatus to empty string
 		// which will skip recording metrics for this execution.
 		executionStatus = ""
 	}
-	workflowName := wf.getWorkflowName(state.History, state.Inbox)
-	// Request to execute workflow
-	wfLogger.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", wf.actorID, wi.InstanceID)
-	// Schedule the workflow execution by signaling the backend
-	err = wf.scheduler(ctx, wi)
-	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			return newRecoverableError(fmt.Errorf("timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running: %w", err))
+
+	workflowName := wf.getWorkflowName(runtimeState.OldEvents(), runtimeState.NewEvents())
+
+	var esHistoryEvent *backend.HistoryEvent
+	for _, e := range runtimeState.NewEvents() {
+		if es := e.GetExecutionStarted(); es != nil {
+			esHistoryEvent = e
+			break
 		}
-		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
 
 	wf.recordWorkflowSchedulingLatency(ctx, esHistoryEvent, workflowName)
@@ -533,24 +592,26 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 		}
 	}()
 
-	select {
-	case <-ctx.Done(): // caller is responsible for timeout management
-		// Workflow execution failed with recoverable error
+	if !wfResult.Success {
+		// Activity execution failed with recoverable error
 		executionStatus = diag.StatusRecoverable
-		return ctx.Err()
-	case completed := <-callback:
-		if !completed {
-			// Workflow execution failed with recoverable error
-			executionStatus = diag.StatusRecoverable
-			return newRecoverableError(errExecutionAborted)
+
+		// trigger workflow run again, so its retried after this execution abort
+		_, err = wf.createReliableReminder(ctx, "start", nil, wf.reminderInterval)
+		if err != nil {
+			wfLogger.Errorf("error re-creating workflow reminder %v", err)
+			return newRecoverableError(errExecutionAborted) // AbandonOrchestrationWorkItem was called
 		}
+		// aborted execution has been successfully processed, the workflow execution will start from the beginning with the reminder that has been created
+		return nil
 	}
-	wfLogger.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", wf.actorID, runtimeState.RuntimeStatus().String(), wi.InstanceID)
+
+	wfLogger.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", wf.actorID, runtimeState.RuntimeStatus().String(), runtimeState.InstanceID())
 
 	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
 	// will use this updated generation value for their duplication execution handling.
 	if runtimeState.ContinuedAsNew() {
-		wfLogger.Debugf("Workflow actor '%s': workflow with instanceId '%s' continued as new", wf.actorID, wi.InstanceID)
+		wfLogger.Debugf("Workflow actor '%s': workflow with instanceId '%s' continued as new", wf.actorID, runtimeState.InstanceID())
 		state.Generation += 1
 	}
 
@@ -616,7 +677,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 
 		wfLogger.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s'", wf.actorID, targetActorID)
 		req := internalsv1pb.
-			NewInternalInvokeRequest("Execute").
+			NewInternalInvokeRequest(ExecuteActivityMethod).
 			WithActor(wf.config.activityActorType, targetActorID).
 			WithData(activityRequestBytes).
 			WithContentType(invokev1.OctetStreamContentType)

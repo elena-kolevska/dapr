@@ -764,6 +764,11 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize Dapr workflow component: %w", err)
 	}
 
+	err := a.workflowEngine.Start(ctx)
+	if err != nil {
+		return err
+	}
+
 	log.Info("Workflow engine initialized.")
 
 	return a.runnerCloser.AddCloser(func() error {
