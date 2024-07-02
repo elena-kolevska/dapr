@@ -68,7 +68,7 @@ func init() {
 func TestStartWorkflowEngine(t *testing.T) {
 	ctx := context.Background()
 	engine := getEngine(t, ctx)
-	engine.ConfigureGrpcExecutor()
+	engine.ConfigureGrpcExecutor(ctx)
 	grpcServer := grpc.NewServer()
 	engine.RegisterGrpcServer(grpcServer)
 	err := engine.Start(ctx)
