@@ -45,6 +45,8 @@ type WorkflowEngine struct {
 	spec            config.WorkflowSpec
 	wfEngineReady   atomic.Bool
 	wfEngineReadyCh chan struct{}
+
+	workItemsStreamsCount atomic.Int32
 }
 
 var (
@@ -85,9 +87,54 @@ func (wfe *WorkflowEngine) RegisterGrpcServer(grpcServer *grpc.Server) {
 	wfe.registerGrpcServerFn(grpcServer)
 }
 
-func (wfe *WorkflowEngine) ConfigureGrpcExecutor() {
+func (wfe *WorkflowEngine) ConfigureGrpcExecutor(appCtx context.Context) {
 	// Enable lazy auto-starting the worker only when a workflow app connects to fetch work items.
-	autoStartCallback := backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
+	autoStartCallback := backend.WithOnGetWorkItemsConnectionCallback(func(streamCtx context.Context) error {
+
+		abe, ok := wfe.Backend.(actorsbe.ActorsManager)
+		if ok {
+			err := abe.RegisterActor(appCtx)
+			if err != nil {
+				wfLogger.Warnf("error registering actors %v", err)
+			}
+
+			abe.StartScheduling()
+
+			if wfe.worker != nil {
+				err = wfe.worker.Start(context.Background())
+				if err != nil {
+					wfLogger.Warnf("error starting workflow worker: %v", err)
+				}
+			}
+		} else {
+			return fmt.Errorf("unexpected backend type %T", wfe.Backend)
+		}
+
+		wfe.workItemsStreamsCount.Add(1)
+
+		go func() {
+			<-streamCtx.Done()
+			wfe.workItemsStreamsCount.Add(-1)
+			if wfe.workItemsStreamsCount.Load() == int32(0) {
+
+				abe.StopScheduling()
+
+				if wfe.worker != nil {
+					err := wfe.worker.Shutdown(appCtx)
+					if err != nil {
+						wfLogger.Warnf("error stopping workflow worker: %v", err)
+					}
+					wfLogger.Infof("done stopping workflow worker")
+				}
+
+				err := abe.UnRegisterActor(appCtx)
+				if err != nil {
+					wfLogger.Warnf("error unregistering actors after last grpc stream %v", err)
+				}
+
+			}
+		}()
+
 		// NOTE: We don't propagate the context here because that would cause the engine to shut
 		//       down when the client disconnects and cancels the passed-in context. Once it starts
 		//       up, we want to keep the engine running until the runtime shuts down.

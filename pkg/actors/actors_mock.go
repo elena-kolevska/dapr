@@ -47,6 +47,11 @@ type MockPlacement struct {
 	lookupActorResponses map[string]internal.LookupActorResponse
 }
 
+// DeleteHostedActorType implements internal.PlacementService.
+func (p *MockPlacement) DeleteHostedActorType(actorType string) error {
+	panic("unimplemented")
+}
+
 func NewMockPlacement(testAppID string) internal.PlacementService {
 	return &MockPlacement{
 		testAppID:            testAppID,
