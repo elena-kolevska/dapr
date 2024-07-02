@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -74,6 +76,9 @@ func (c *actorsBackendConfig) String() string {
 type ActorBackend struct {
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
+	pendingOrchestrators      *sync.Map
+	pendingActivities         *sync.Map
+	startedOnce               sync.Once
 	config                    actorsBackendConfig
 	activityActorOpts         activityActorOpts
 	workflowActorOpts         workflowActorOpts
@@ -93,15 +98,26 @@ func NewActorBackend(md wfbe.Metadata, _ logger.Logger) (backend.Backend, error)
 	return &ActorBackend{
 		orchestrationWorkItemChan: orchestrationWorkItemChan,
 		activityWorkItemChan:      activityWorkItemChan,
+		pendingOrchestrators:      &sync.Map{},
+		pendingActivities:         &sync.Map{},
 		config:                    backendConfig,
 		actorsReadyCh:             make(chan struct{}),
 	}, nil
 }
 
+// will be implemented in the diagrid custom layer
+func (abe *ActorBackend) EnqueueWorkItem(ctx context.Context, wi *backend.GenericWorkItem) error {
+	return nil
+}
+
+func (abe *ActorBackend) ConsumeWorkItems(ctx context.Context, cb func(*backend.GenericWorkItem) error) error {
+	return nil
+}
+
 // getWorkflowScheduler returns a workflowScheduler func that sends an orchestration work item to the Durable Task Framework.
 func getWorkflowScheduler(orchestrationWorkItemChan chan *backend.OrchestrationWorkItem) workflowScheduler {
 	return func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
-		wfLogger.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
+		wfLogger.Debugf("%s: scheduling workflow execution with durabletask engine new events %v", wi.InstanceID, len(wi.NewEvents))
 		select {
 		case <-ctx.Done(): // <-- engine is shutting down or a caller timeout expired
 			return ctx.Err()
@@ -131,8 +147,8 @@ func getActivityScheduler(activityWorkItemChan chan *backend.ActivityWorkItem) a
 // InternalActors returns a map of internal actors that are used to implement workflows
 func (abe *ActorBackend) GetInternalActorsMap() map[string]actors.InternalActorFactory {
 	internalActors := make(map[string]actors.InternalActorFactory)
-	internalActors[abe.config.workflowActorType] = NewWorkflowActor(getWorkflowScheduler(abe.orchestrationWorkItemChan), abe.config, &abe.workflowActorOpts)
-	internalActors[abe.config.activityActorType] = NewActivityActor(getActivityScheduler(abe.activityWorkItemChan), abe.config, &abe.activityActorOpts)
+	internalActors[abe.config.workflowActorType] = NewWorkflowActor(getWorkflowScheduler(abe.orchestrationWorkItemChan), abe.onOrchestratorResponseCallback(), abe.config, &abe.workflowActorOpts)
+	internalActors[abe.config.activityActorType] = NewActivityActor(getActivityScheduler(abe.activityWorkItemChan), abe.onActivityResponseCallback(), abe.config, &abe.activityActorOpts)
 	return internalActors
 }
 
@@ -145,12 +161,14 @@ func (abe *ActorBackend) SetActorRuntime(ctx context.Context, actorRuntime actor
 
 func (abe *ActorBackend) RegisterActor(ctx context.Context) error {
 	if abe.actorRuntime != nil {
+		errs := []error{}
 		for actorType, actor := range abe.GetInternalActorsMap() {
 			err := abe.actorRuntime.RegisterInternalActor(ctx, actorType, actor, time.Minute*1)
 			if err != nil {
-				return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
+				errs = append(errs, fmt.Errorf("failed to register workflow actor %s: %w", actorType, err))
 			}
 		}
+		return errors.Join(errs...)
 	}
 
 	return nil
@@ -241,26 +259,60 @@ func (abe *ActorBackend) GetOrchestrationMetadata(ctx context.Context, id api.In
 
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow activity execution pipeline.
-func (*ActorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+func (a *ActorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
 	wfLogger.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.GetEventId())
 
 	// Sending false signals the waiting activity actor to abort the activity execution.
-	if channel, ok := wi.Properties[CallbackChannelProperty]; ok {
-		channel.(chan bool) <- false
+
+	wfState, err := a.getWorkflowState(ctx, string(wi.InstanceID))
+	if err != nil {
+		return err
 	}
-	return nil
+	targetActorID := getActivityActorID(string(wi.InstanceID), wi.NewEvent.EventId, wfState.Generation)
+
+	protoEvent, err := backend.MarshalHistoryEvent(wi.NewEvent)
+	if err != nil {
+		return err
+	}
+
+	dataEnc, err := json.Marshal(ActivityResult{
+		ActivityEvent: protoEvent,
+		Success:       false,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to encode data as JSON: %w", err)
+	}
+	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
+		ActorType: a.config.activityActorType,
+		ActorID:   targetActorID,
+		Data:      dataEnc,
+		DueTime:   "0s",
+		Name:      "run-activity-sync",
+		Period:    a.activityActorOpts.reminderInterval.String(),
+	})
 }
 
 // AbandonOrchestrationWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow orchestration execution pipeline.
-func (*ActorBackend) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+func (a *ActorBackend) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 	wfLogger.Warnf("%s: aborting workflow execution", wi.InstanceID)
 
 	// Sending false signals the waiting workflow actor to abort the workflow execution.
-	if channel, ok := wi.Properties[CallbackChannelProperty]; ok {
-		channel.(chan bool) <- false
+	dataEnc, err := json.Marshal(workflowResult{
+		Success:      false,
+		RuntimeState: backend.ConvertToSerializableRuntimeState(wi.State),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
-	return nil
+	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
+		ActorType: a.config.workflowActorType,
+		ActorID:   string(wi.InstanceID),
+		Data:      dataEnc,
+		DueTime:   "0s",
+		Name:      "start-sync",
+		Period:    a.workflowActorOpts.reminderInterval.String(),
+	})
 }
 
 // AddNewOrchestrationEvent implements backend.Backend and sends the event e to the workflow actor identified by id.
@@ -291,17 +343,61 @@ func (abe *ActorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.In
 }
 
 // CompleteActivityWorkItem implements backend.Backend
-func (*ActorBackend) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+func (a *ActorBackend) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
 	// Sending true signals the waiting activity actor to complete the execution normally.
-	wi.Properties[CallbackChannelProperty].(chan bool) <- true
-	return nil
+	wfState, err := a.getWorkflowState(ctx, string(wi.InstanceID))
+	if err != nil {
+		return err
+	}
+	targetActorID := getActivityActorID(string(wi.InstanceID), wi.NewEvent.EventId, wfState.Generation)
+
+	protoEvent, err := backend.MarshalHistoryEvent(wi.NewEvent)
+	if err != nil {
+		return err
+	}
+
+	protoResult, err := backend.MarshalHistoryEvent(wi.Result)
+	if err != nil {
+		return err
+	}
+
+	dataEnc, err := json.Marshal(ActivityResult{
+		ActivityEvent: protoEvent,
+		ResultEvent:   protoResult,
+		Success:       true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to encode data as JSON: %w", err)
+	}
+	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
+		ActorType: a.config.activityActorType,
+		ActorID:   targetActorID,
+		Data:      dataEnc,
+		DueTime:   "0s",
+		Name:      "run-activity-sync",
+		Period:    a.activityActorOpts.reminderInterval.String(),
+	})
 }
 
 // CompleteOrchestrationWorkItem implements backend.Backend
-func (*ActorBackend) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+func (a *ActorBackend) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 	// Sending true signals the waiting workflow actor to complete the execution normally.
-	wi.Properties[CallbackChannelProperty].(chan bool) <- true
-	return nil
+	dataEnc, err := json.Marshal(workflowResult{
+		Success:      true,
+		RuntimeState: backend.ConvertToSerializableRuntimeState(wi.State),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to encode data as JSON: %w", err)
+	}
+
+	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
+		ActorType: a.config.workflowActorType,
+		ActorID:   string(wi.InstanceID),
+		Data:      dataEnc,
+		DueTime:   "0s",
+		Name:      "start-sync",
+		Period:    a.workflowActorOpts.reminderInterval.String(),
+	})
 }
 
 // CreateTaskHub implements backend.Backend
@@ -331,12 +427,11 @@ func (abe *ActorBackend) GetActivityWorkItem(ctx context.Context) (*backend.Acti
 	}
 }
 
-// GetOrchestrationRuntimeState implements backend.Backend
-func (abe *ActorBackend) GetOrchestrationRuntimeState(ctx context.Context, owi *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
+func (abe *ActorBackend) getWorkflowState(ctx context.Context, instanceID string) (*workflowState, error) {
 	// Invoke the corresponding actor, which internally stores its own workflow state.
 	req := internalsv1pb.
 		NewInternalInvokeRequest(GetWorkflowStateMethod).
-		WithActor(abe.config.workflowActorType, string(owi.InstanceID)).
+		WithActor(abe.config.workflowActorType, instanceID).
 		WithContentType(invokev1.OctetStreamContentType)
 
 	res, err := abe.actorRuntime.Call(ctx, req)
@@ -347,6 +442,15 @@ func (abe *ActorBackend) GetOrchestrationRuntimeState(ctx context.Context, owi *
 	err = wfState.DecodeWorkflowState(res.GetMessage().GetData().GetValue())
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
+	}
+	return wfState, nil
+}
+
+// GetOrchestrationRuntimeState implements backend.Backend
+func (abe *ActorBackend) GetOrchestrationRuntimeState(ctx context.Context, owi *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
+	wfState, err := abe.getWorkflowState(ctx, string(owi.InstanceID))
+	if err != nil {
+		return nil, err
 	}
 	runtimeState := getRuntimeState(string(owi.InstanceID), wfState)
 	return runtimeState, nil
@@ -381,6 +485,160 @@ func (abe *ActorBackend) PurgeOrchestrationState(ctx context.Context, id api.Ins
 	}
 	// successful request to PURGE WORKFLOW, record latency and count metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusSuccess, elapsed)
+	return nil
+}
+
+func getPendingActivityKey(iid string, taskID int32) string {
+	return iid + "/" + strconv.FormatInt(int64(taskID), 10)
+}
+
+// SetPendingActivity implements backend.Backend.
+func (abe *ActorBackend) SetPendingActivity(ctx context.Context, id api.InstanceID, taskID int32) error {
+	abe.pendingActivities.Store(getPendingActivityKey(string(id), taskID), make(chan *backend.ActivityResponse, 1))
+	return nil
+}
+
+func (abe *ActorBackend) onActivityResponseCallback() onPendingActivityResponse {
+	return func(ar *backend.ActivityResponse) error {
+		pendingAc, ok := abe.pendingActivities.Load(getPendingActivityKey(ar.InstanceId, ar.TaskId))
+		if !ok {
+			return errors.New("pending activity not found")
+		}
+
+		ch, ok := pendingAc.(chan *backend.ActivityResponse)
+		if !ok {
+			return fmt.Errorf("unexpected pending activity type %T", pendingAc)
+		}
+
+		ch <- ar
+
+		return nil
+	}
+}
+
+// WaitForPendingActivity implements backend.Backend.
+func (abe *ActorBackend) WaitForPendingActivity(ctx context.Context, id api.InstanceID, taskID int32) (*backend.ActivityResponse, error) {
+	pendingAc, ok := abe.pendingActivities.Load(getPendingActivityKey(string(id), taskID))
+	if !ok {
+		return nil, errors.New("pending activity not found")
+	}
+
+	ch, ok := pendingAc.(chan *backend.ActivityResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected pending activity type %T", pendingAc)
+	}
+
+	defer abe.pendingActivities.Delete(getPendingActivityKey(string(id), taskID))
+	defer close(ch)
+
+	select {
+	case <-ctx.Done():
+		return nil, errors.New("wait context cancelled")
+	case response := <-ch:
+		return response, nil
+	}
+}
+
+// CompletePendingActivity implements backend.Backend.
+func (abe *ActorBackend) CompletePendingActivity(ctx context.Context, res *backend.ActivityResponse) error {
+	raw, err := backend.MarshalActivityResponse(res)
+	if err != nil {
+		return err
+	}
+
+	wfState, err := abe.getWorkflowState(ctx, res.InstanceId)
+	if err != nil {
+		return err
+	}
+	targetActorID := getActivityActorID(res.InstanceId, res.TaskId, wfState.Generation)
+
+	req := internalsv1pb.
+		NewInternalInvokeRequest(CompletePendingActivityMethod).
+		WithActor(abe.config.activityActorType, targetActorID).
+		WithData(raw).
+		WithContentType(invokev1.OctetStreamContentType)
+
+	_, err = abe.actorRuntime.Call(ctx, req)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// SetPendingOrchestrator implements backend.Backend.
+func (abe *ActorBackend) SetPendingOrchestrator(ctx context.Context, id api.InstanceID) error {
+	wfLogger.Infof("setting pending orchestrator %v", string(id))
+	abe.pendingOrchestrators.Store(string(id), make(chan *backend.OrchestratorResponse, 1))
+	return nil
+}
+
+func (abe *ActorBackend) onOrchestratorResponseCallback() onPendingOrchestratorResponse {
+	return func(or *backend.OrchestratorResponse) error {
+		wfLogger.Infof("on pending orchestrator response %v", or.InstanceId)
+		pendingOrch, ok := abe.pendingOrchestrators.Load(or.InstanceId)
+		if !ok {
+			return errors.New("pending orchestrator not found")
+		}
+
+		ch, ok := pendingOrch.(chan *backend.OrchestratorResponse)
+		if !ok {
+			return fmt.Errorf("unexpected pending orchestrator type %T", pendingOrch)
+		}
+
+		ch <- or
+
+		wfLogger.Debugf("delivered pending orchestrator response %v", or.InstanceId)
+
+		return nil
+	}
+}
+
+// WaitForPendingOrchestrator implements backend.Backend.
+func (abe *ActorBackend) WaitForPendingOrchestrator(ctx context.Context, id api.InstanceID) (*backend.OrchestratorResponse, error) {
+	wfLogger.Infof("waiting for pending orchestrator response %v", string(id))
+
+	pendingOrch, ok := abe.pendingOrchestrators.Load(string(id))
+	if !ok {
+		return nil, errors.New("pending orchestrator not found")
+	}
+
+	ch, ok := pendingOrch.(chan *backend.OrchestratorResponse)
+	if !ok {
+		return nil, fmt.Errorf("unexpected pending orchestrator type %T", pendingOrch)
+	}
+
+	defer abe.pendingOrchestrators.Delete(string(id))
+	defer close(ch)
+
+	select {
+	case <-ctx.Done():
+		return nil, errors.New("wait context cancelled")
+	case response := <-ch:
+		wfLogger.Debugf("received pending orchestrator response %v", string(id))
+		return response, nil
+	}
+}
+
+// CompletePendingOrchestrator implements backend.Backend.
+func (abe *ActorBackend) CompletePendingOrchestrator(ctx context.Context, res *backend.OrchestratorResponse) error {
+	wfLogger.Infof("completing pending orchestrator %v", res.InstanceId)
+
+	raw, err := backend.MarshalOrchestratorResponse(res)
+	if err != nil {
+		return err
+	}
+
+	req := internalsv1pb.
+		NewInternalInvokeRequest(CompletePendingOrchestratorMethod).
+		WithActor(abe.config.workflowActorType, res.InstanceId).
+		WithData(raw).
+		WithContentType(invokev1.OctetStreamContentType)
+
+	_, err = abe.actorRuntime.Call(ctx, req)
+	if err != nil {
+		return err
+	}
+	wfLogger.Infof("completed pending orchestrator %v", res.InstanceId)
 	return nil
 }
 
