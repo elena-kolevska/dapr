@@ -45,6 +45,8 @@ type WorkflowEngine struct {
 	spec            config.WorkflowSpec
 	wfEngineReady   atomic.Bool
 	wfEngineReadyCh chan struct{}
+
+	workItemsStreamsCount atomic.Int32
 }
 
 var (
@@ -86,16 +88,7 @@ func (wfe *WorkflowEngine) RegisterGrpcServer(grpcServer *grpc.Server) {
 }
 
 func (wfe *WorkflowEngine) ConfigureGrpcExecutor() {
-	// Enable lazy auto-starting the worker only when a workflow app connects to fetch work items.
 	autoStartCallback := backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
-		// NOTE: We don't propagate the context here because that would cause the engine to shut
-		//       down when the client disconnects and cancels the passed-in context. Once it starts
-		//       up, we want to keep the engine running until the runtime shuts down.
-		if err := wfe.Start(context.Background()); err != nil {
-			// This can happen if the workflow app connects before the sidecar has finished initializing.
-			// The client app is expected to continuously retry until successful.
-			return fmt.Errorf("failed to auto-start the workflow engine: %w", err)
-		}
 		return nil
 	})
 
