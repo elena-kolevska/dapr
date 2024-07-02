@@ -157,6 +157,16 @@ func (p *actorPlacement) AddHostedActorType(actorType string, idleTimeout time.D
 	return nil
 }
 
+func (p *actorPlacement) DeleteHostedActorType(actorType string) error {
+	for i, t := range p.actorTypes {
+		if t == actorType {
+			p.actorTypes = append(p.actorTypes[:i], p.actorTypes[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("actor type %s not found", actorType)
+}
+
 // Start connects placement service to register to membership and send heartbeat
 // to report the current member status periodically.
 func (p *actorPlacement) Start(ctx context.Context) error {
