@@ -75,6 +75,7 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 	sec, err := security.New(ctx, security.Options{
 		ControlPlaneTrustDomain: opts.Config.TrustDomain,
 		ControlPlaneNamespace:   ns,
+		NamespacedRBAC:          s.conf.RBACNamespaced,
 		AppID:                   "dapr-sentry",
 		TrustAnchors:            camngr.TrustAnchors(),
 		MTLSEnabled:             true,
