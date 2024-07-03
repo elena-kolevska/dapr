@@ -59,6 +59,7 @@ type Options struct {
 	RestConfig     *rest.Config
 	SentryID       spiffeid.ID
 	ControlPlaneNS string
+	NamespacedRBAC bool
 	Healthz        healthz.Healthz
 }
 
@@ -88,7 +89,12 @@ func New(opts Options) (validator.Validator, error) {
 		return nil, err
 	}
 
-	cache, err := cache.New(opts.RestConfig, cache.Options{Scheme: scheme})
+	cacheOpts := cache.Options{Scheme: scheme}
+	if opts.NamespacedRBAC {
+		cacheOpts.DefaultNamespaces = map[string]cache.Config{opts.ControlPlaneNS: cache.Config{}}
+	}
+
+	cache, err := cache.New(opts.RestConfig, cacheOpts)
 	if err != nil {
 		return nil, err
 	}
