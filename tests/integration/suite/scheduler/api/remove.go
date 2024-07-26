@@ -106,7 +106,6 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		keys, rerr := etcdClient.ListAllKeys(ctx, "dapr/jobs")
 		require.NoError(c, rerr)
-
 		assert.Len(c, keys, 1, fmt.Sprintf("expected 1 key, got %d", len(keys)))
 	}, time.Second*30, 10*time.Millisecond)
 
@@ -136,7 +135,7 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 			},
 		},
 	})
-	require.NoError(t, err, fmt.Sprintf("Unexpected err message:", err))
+	require.NoError(t, err, fmt.Sprintf("Unexpected err message: %v", err))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		keys, rerr := etcdClient.ListAllKeys(ctx, "dapr/jobs")
