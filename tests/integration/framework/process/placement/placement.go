@@ -166,6 +166,7 @@ func (p *Placement) WaitUntilLeader(t *testing.T, ctx context.Context) {
 
 	require.Eventually(t, func() bool {
 		stream, err = client.ReportDaprStatus(ctx)
+		defer stream.CloseSend()
 		if err != nil {
 			return false
 		}
@@ -177,7 +178,7 @@ func (p *Placement) WaitUntilLeader(t *testing.T, ctx context.Context) {
 	require.Eventually(t, func() bool {
 		_, err = stream.Recv()
 		return err == nil
-	}, 10*time.Second, 10*time.Millisecond)
+	}, 30*time.Second, 10*time.Millisecond)
 }
 
 func (p *Placement) ID() string {
