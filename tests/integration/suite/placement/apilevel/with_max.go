@@ -55,7 +55,7 @@ func (n *withMax) Run(t *testing.T, ctx context.Context) {
 
 	httpClient := client.HTTP(t)
 
-	n.place.WaitUntilLeader(t, ctx)
+	n.place.WaitUntilRunning(t, ctx)
 
 	// Collect messages
 	currentVersion := atomic.Uint32{}
