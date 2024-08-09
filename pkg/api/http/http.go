@@ -190,21 +190,21 @@ func appendStateSpanAttributes(r *nethttp.Request, m map[string]string) {
 func (a *api) constructStateEndpoints() []endpoints.Endpoint {
 	return []endpoints.Endpoint{
 		{
-			Methods:         []string{nethttp.MethodGet},
-			Route:           "state/{storeName}/{key}",
-			Version:         apiVersionV1,
-			Group:           endpointGroupStateV1,
-			FastHTTPHandler: a.onGetState,
+			Methods: []string{nethttp.MethodGet},
+			Route:   "state/{storeName}/{key}",
+			Version: apiVersionV1,
+			Group:   endpointGroupStateV1,
+			Handler: a.onGetState,
 			Settings: endpoints.EndpointSettings{
 				Name: "GetState",
 			},
 		},
 		{
-			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:           "state/{storeName}",
-			Version:         apiVersionV1,
-			Group:           endpointGroupStateV1,
-			FastHTTPHandler: a.onPostState,
+			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
+			Route:   "state/{storeName}",
+			Version: apiVersionV1,
+			Group:   endpointGroupStateV1,
+			Handler: a.onPostState,
 			Settings: endpoints.EndpointSettings{
 				Name: "SaveState",
 			},
@@ -272,7 +272,7 @@ func (a *api) constructPubSubEndpoints() []endpoints.Endpoint {
 				Version:              endpoints.EndpointGroupVersion1,
 				AppendSpanAttributes: appendPubSubSpanAttributes,
 			},
-			FastHTTPHandler: a.onPublish,
+			Handler: a.onPublish,
 			Settings: endpoints.EndpointSettings{
 				Name: "PublishEvent",
 			},
@@ -590,21 +590,41 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 	return stateStore, storeName, nil
 }
 
-func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
-	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
+func (a *api) getStateStoreWithRequestValidationHttp(w nethttp.ResponseWriter, r *nethttp.Request) (state.Store, string, error) {
+	storeName := chi.URLParam(r, storeNameParam)
+
+	if a.universal.CompStore().StateStoresLen() == 0 {
+		err := apierrors.StateStore(storeName).NotConfigured(a.universal.AppID())
+		log.Debug(err)
+		respondWithError(w, err)
+		return nil, "", err
+	}
+
+	stateStore, ok := a.universal.CompStore().GetStateStore(storeName)
+	if !ok {
+		err := apierrors.StateStore(storeName).NotFound(a.universal.AppID())
+		log.Debug(err)
+		respondWithError(w, err)
+		return nil, "", err
+	}
+	return stateStore, storeName, nil
+}
+
+func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
+	store, storeName, err := a.getStateStoreWithRequestValidationHttp(w, r)
 	if err != nil {
 		log.Debug(err)
 		return
 	}
 
-	metadata := getMetadataFromFastHTTPRequest(reqCtx)
+	metadata := getMetadataFromRequest(r)
 
-	key := reqCtx.UserValue(stateKeyParam).(string)
-	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
+	key := chi.URLParam(r, stateKeyParam)
+	consistency := r.URL.Query().Get(consistencyParam)
 	k, err := stateLoader.GetModifiedStateKey(key, storeName, a.universal.AppID())
 	if err != nil {
 		status := apierrors.StateStore(storeName).InvalidKeyName(key, err.Error())
-		universalFastHTTPErrorResponder(reqCtx, status)
+		respondWithError(w, status)
 		log.Debug(status)
 
 		return
@@ -618,7 +638,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[*state.GetResponse](reqCtx,
+	policyRunner := resiliency.NewRunner[*state.GetResponse](r.Context(),
 		a.universal.Resiliency().ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
@@ -630,13 +650,13 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 	if err != nil {
 		msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
+		respondWithData(w, nethttp.StatusInternalServerError, msg.JSONErrorValue())
 		log.Debug(msg)
 		return
 	}
 
 	if resp == nil || resp.Data == nil {
-		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
+		respondWithEmpty(w)
 		return
 	}
 
@@ -644,7 +664,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		val, err := encryption.TryDecryptValue(storeName, resp.Data)
 		if err != nil {
 			msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
+			respondWithData(w, nethttp.StatusInternalServerError, msg.JSONErrorValue())
 			log.Debug(msg)
 			return
 		}
@@ -653,14 +673,12 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	if resp.ETag != nil {
-		reqCtx.Response.Header.Add(etagHeader, *resp.ETag)
+		w.Header().Add(etagHeader, *resp.ETag)
 	}
 
-	for k, v := range resp.Metadata {
-		reqCtx.Response.Header.Add(metadataPrefix+k, v)
-	}
+	setResponseMetadataHeaders(w, resp.Metadata)
 
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
+	respondWithData(w, nethttp.StatusOK, resp.Data)
 }
 
 func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {
@@ -956,32 +974,40 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
-func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
-	store, storeName, err := a.getStateStoreWithRequestValidation(reqCtx)
+func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
+	store, storeName, err := a.getStateStoreWithRequestValidationHttp(w, r)
 	if err != nil {
 		log.Debug(err)
 		return
 	}
 
 	reqs := []state.SetRequest{}
-	err = json.Unmarshal(reqCtx.PostBody(), &reqs)
+	body, err := io.ReadAll(r.Body)
+	defer r.Body.Close()
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+		respondWithData(w, nethttp.StatusBadRequest, msg.JSONErrorValue())
+		log.Debug(msg)
+		return
+	}
+	err = json.Unmarshal(body, &reqs)
+	if err != nil {
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		respondWithData(w, nethttp.StatusBadRequest, msg.JSONErrorValue())
 		log.Debug(msg)
 		return
 	}
 	if len(reqs) == 0 {
-		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
+		respondWithEmpty(w)
 		return
 	}
 
-	metadata := getMetadataFromFastHTTPRequest(reqCtx)
+	metadata := getMetadataFromRequest(r)
 
 	for i, r := range reqs {
 		if len(reqs[i].Key) == 0 {
 			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", `"key" is a required field`)
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+			respondWithData(w, nethttp.StatusBadRequest, msg.JSONErrorValue())
 			log.Debug(msg)
 			return
 		}
@@ -998,7 +1024,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		reqs[i].Key, err = stateLoader.GetModifiedStateKey(r.Key, storeName, a.universal.AppID())
 		if err != nil {
 			status := apierrors.StateStore(storeName).InvalidKeyName(r.Key, err.Error())
-			universalFastHTTPErrorResponder(reqCtx, status)
+			respondWithError(w, status)
 			log.Debug(status)
 			return
 		}
@@ -1010,7 +1036,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 				statusCode, errMsg, resp := a.stateErrorResponse(encErr, "ERR_STATE_SAVE")
 				resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
 
-				fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
+				respondWithData(w, statusCode, resp.JSONErrorValue())
 				log.Debug(resp.Message)
 				return
 			}
@@ -1020,7 +1046,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	err = stateLoader.PerformBulkStoreOperation(reqCtx, reqs,
+	err = stateLoader.PerformBulkStoreOperation(r.Context(), reqs,
 		a.universal.Resiliency().ComponentOutboundPolicy(storeName, resiliency.Statestore),
 		state.BulkStoreOpts{},
 		store.Set,
@@ -1028,18 +1054,18 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	)
 	elapsed := diag.ElapsedSince(start)
 
-	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Set, err == nil, elapsed)
+	diag.DefaultComponentMonitoring.StateInvoked(r.Context(), storeName, diag.Set, err == nil, elapsed)
 
 	if err != nil {
 		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_SAVE")
 		resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
 
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
+		respondWithData(w, statusCode, resp.JSONErrorValue())
 		log.Debug(resp.Message)
 		return
 	}
 
-	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
+	respondWithEmpty(w)
 }
 
 // stateErrorResponse takes a state store error and returns a corresponding status code, error message and modified user error.
@@ -1076,22 +1102,28 @@ func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
 	return reqCtx.UserValue(storeNameParam).(string)
 }
 
-func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
-	thepubsub, pubsubName, topic, validationErr := a.validateAndGetPubsubAndTopic(reqCtx)
+func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
+	thepubsub, pubsubName, topic, validationErr := a.validateAndGetPubsubAndTopicHttp(r)
 
 	if validationErr != nil {
 		log.Debug(validationErr)
-		universalFastHTTPErrorResponder(reqCtx, validationErr)
+		respondWithError(w, validationErr)
 		return
 	}
 
-	body := reqCtx.PostBody()
-	contentType := string(reqCtx.Request.Header.Peek("Content-Type"))
-	metadata := getMetadataFromFastHTTPRequest(reqCtx)
+	body, err := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	if validationErr != nil {
+		log.Debug(validationErr)
+		respondWithError(w, validationErr)
+		return
+	}
+	contentType := r.Header.Get("Content-Type")
+	metadata := getMetadataFromRequest(r)
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
 		err := apierrors.PubSub(pubsubName).WithMetadata(metadata).DeserializeError(metaErr)
-		universalFastHTTPErrorResponder(reqCtx, err)
+		respondWithError(w, err)
 		log.Debug(err)
 		return
 	}
@@ -1099,7 +1131,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	data := body
 
 	if !rawPayload {
-		span := diagUtils.SpanFromContext(reqCtx)
+		span := diagUtils.SpanFromContext(r.Context())
 		corID, traceState := diag.TraceIDAndStateFromSpan(span)
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			Source:          a.universal.AppID(),
@@ -1114,7 +1146,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			nerr := apierrors.PubSub(pubsubName).WithAppError(
 				a.universal.AppID(), err,
 			).CloudEventCreation()
-			universalFastHTTPErrorResponder(reqCtx, nerr)
+			respondWithError(w, nerr)
 			log.Debug(nerr)
 			return
 		}
@@ -1128,7 +1160,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			nerr := apierrors.PubSub(pubsubName).WithAppError(
 				a.universal.AppID(), err,
 			).WithTopic(topic).MarshalEnvelope()
-			universalFastHTTPErrorResponder(reqCtx, nerr)
+			respondWithError(w, nerr)
 			log.Debug(nerr)
 			return
 		}
@@ -1142,7 +1174,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	err := a.pubsubAdapter.Publish(reqCtx, &req)
+	err = a.pubsubAdapter.Publish(r.Context(), &req)
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
@@ -1159,10 +1191,10 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			nerr = apierrors.PubSub(pubsubName).PublishMessage(topic, err)
 		}
 
-		universalFastHTTPErrorResponder(reqCtx, nerr)
+		respondWithError(w, nerr)
 		log.Debug(nerr)
 	} else {
-		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
+		respondWithEmpty(w)
 	}
 }
 
@@ -1387,6 +1419,37 @@ func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.
 	}
 
 	topic := reqCtx.UserValue(wildcardParam).(string)
+	if topic == "" {
+		err = apierrors.PubSub(pubsubName).WithMetadata(metadata).TopicEmpty()
+		return nil, "", "", err
+	}
+
+	return thepubsub.Component, pubsubName, topic, nil
+}
+
+func (a *api) validateAndGetPubsubAndTopicHttp(r *nethttp.Request) (pubsub.PubSub, string, string, error) {
+	var err error
+
+	pubsubName := chi.URLParam(r, pubsubnameparam)
+	metadata := getMetadataFromRequest(r)
+
+	if a.pubsubAdapter == nil {
+		err = apierrors.PubSub(pubsubName).WithMetadata(metadata).NotConfigured()
+		return nil, "", "", err
+	}
+
+	if pubsubName == "" {
+		err = apierrors.PubSub(pubsubName).WithMetadata(metadata).NameEmpty()
+		return nil, "", "", err
+	}
+
+	thepubsub, ok := a.universal.CompStore().GetPubSub(pubsubName)
+	if !ok {
+		err = apierrors.PubSub(pubsubName).WithMetadata(metadata).NotFound()
+		return nil, "", "", err
+	}
+
+	topic := chi.URLParam(r, wildcardParam)
 	if topic == "" {
 		err = apierrors.PubSub(pubsubName).WithMetadata(metadata).TopicEmpty()
 		return nil, "", "", err
@@ -1624,6 +1687,7 @@ func (a *api) onQueryStateHandler() nethttp.HandlerFunc {
 				in.Metadata = getMetadataFromRequest(r)
 
 				body, err := io.ReadAll(r.Body)
+				defer r.Body.Close()
 				if err != nil {
 					return nil, messages.ErrBodyRead.WithFormat(err)
 				}
