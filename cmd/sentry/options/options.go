@@ -47,6 +47,7 @@ type Options struct {
 	RootCAFilename     string
 	IssuerCertFilename string
 	IssuerKeyFilename  string
+	AllowedNamespaces  string
 }
 
 func New(origArgs []string) *Options {
@@ -81,6 +82,7 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.ListenAddress, "listen-address", "", "The listen address for the sentry server")
 	fs.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
+	fs.StringVar(&opts.AllowedNamespaces, "allowed-namespaces", "", "Namespace to allow to communicate with Sentry. You can pass a csv to watch multiple namespaces")
 
 	if home := homedir.HomeDir(); home != "" {
 		fs.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")

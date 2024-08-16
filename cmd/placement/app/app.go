@@ -15,6 +15,7 @@ package app
 
 import (
 	"encoding/json"
+	"github.com/dapr/dapr/pkg/legal"
 	"math"
 	"os"
 
@@ -37,6 +38,9 @@ import (
 var log = logger.NewLogger("dapr.placement")
 
 func Run() {
+	// Disclaimer
+	log.Info(legal.Disclaimer)
+
 	opts := options.New(os.Args[1:])
 
 	// Apply options to all loggers.

@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/dapr/dapr/pkg/legal"
 	"os"
 
 	"go.uber.org/automaxprocs/maxprocs"
@@ -54,6 +55,8 @@ var (
 )
 
 func Run() {
+	// Disclaimer
+	log.Info(legal.Disclaimer)
 	// set GOMAXPROCS
 	_, _ = maxprocs.Set()
 

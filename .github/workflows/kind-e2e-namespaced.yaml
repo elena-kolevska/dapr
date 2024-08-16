@@ -11,7 +11,7 @@
 # limitations under the License.
 #
 
-name: E2E tests on KinD
+name: E2E Namespaced tests on KinD
 
 on:
   # Manual trigger
@@ -50,6 +50,12 @@ jobs:
       DAPR_REGISTRY: localhost:5000/dapr
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
+      DAPR_NAMESPACE_TEST_2: dapr-tests-2
+      
+      # DAPR NAMESPACE SPECIFIC ENV VARS
+      DAPR_RBAC_NAMESPACES: '["dapr-tests","dapr-tests-2"]'
+      DAPR_RBAC_NAMESPACED: "true"
+
       # Useful for upgrade/downgrade/compatibility tests
       # TODO: Make this auto-populated based on GitHub's releases.
       DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.13.0"
@@ -62,8 +68,6 @@ jobs:
       fail-fast: false # Keep running if one leg fails.
       matrix:
         k8s-version:
-        - v1.23.13
-        - v1.24.7
         - v1.25.3
         mode:
         - ha
@@ -181,6 +185,9 @@ jobs:
         else
           export HA_MODE=false
         fi
+        
+        kubectl create namespace "${DAPR_NAMESPACE_TEST_2}"
+
         make docker-deploy-k8s
 
     - name: Setup Redis

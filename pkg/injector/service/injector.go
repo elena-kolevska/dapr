@@ -79,6 +79,9 @@ type Options struct {
 
 	ControlPlaneNamespace   string
 	ControlPlaneTrustDomain string
+
+	PreferUsernameAuth bool
+	AuthUsernames      []string
 }
 
 type injector struct {
@@ -99,6 +102,7 @@ type injector struct {
 	htarget              healthz.Target
 	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
 	running              atomic.Bool
+	authUsernames        []string
 }
 
 // errorToAdmissionResponse is a helper function to create an AdmissionResponse
@@ -154,6 +158,7 @@ func NewInjector(opts Options) (Injector, error) {
 		kubeClient:              opts.KubeClient,
 		daprClient:              opts.DaprClient,
 		authUIDs:                opts.AuthUIDs,
+		authUsernames:           opts.AuthUsernames,
 		controlPlaneNamespace:   opts.ControlPlaneNamespace,
 		controlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
 		htarget:                 opts.Healthz.AddTarget(),
@@ -183,13 +188,28 @@ func createNamespaceNameMatcher(allowedPrefix string) (matcher *namespacednamema
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.
 func AllowedControllersServiceAccountUID(ctx context.Context, cfg Config, kubeClient kubernetes.Interface) ([]string, error) {
-	allowedList := []string{}
+	allowedList := make([]string, len(AllowedServiceAccountInfos))
 	if cfg.AllowedServiceAccounts != "" {
 		allowedList = append(allowedList, strings.Split(cfg.AllowedServiceAccounts, ",")...)
 	}
 	allowedList = append(allowedList, AllowedServiceAccountInfos...)
 
 	return getServiceAccount(ctx, kubeClient, allowedList)
+}
+
+// AllowedControllersServiceAccountUsernames returns an array of UID, list of allowed service account on the webhook handler.
+func AllowedControllersServiceAccountUsernames(cfg Config) []string {
+	allowedList := make([]string, len(AllowedServiceAccountInfos))
+	if cfg.AllowedServiceAccounts != "" {
+		allowedList = append(allowedList, strings.Split(cfg.AllowedServiceAccounts, ",")...)
+	}
+	allowedList = append(allowedList, AllowedServiceAccountInfos...)
+	for i, sa := range allowedList {
+		if !strings.HasPrefix(sa, serviceAccountUserInfoPrefix) {
+			allowedList[i] = serviceAccountUserInfoPrefix + sa
+		}
+	}
+	return allowedList
 }
 
 // getServiceAccount parses "service-account:namespace" k/v list and returns an array of UID.

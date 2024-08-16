@@ -26,6 +26,7 @@ global:
   tolerations: []
   rbac:
     namespaced: false
+    namespaces: []
   ha:
     enabled: false
     replicaCount: 3

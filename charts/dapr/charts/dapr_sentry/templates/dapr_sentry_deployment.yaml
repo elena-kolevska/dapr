@@ -185,6 +185,10 @@ spec:
         - "--issuer-key-filename"
         - "{{ .key }}"
 {{- end }}
+{{- if eq .Values.global.rbac.namespaced true }}
+        - "--allowed-namespaces"
+        - "{{ ternary .Release.Namespace (.Values.global.rbac.namespaces | join ",") (empty .Values.global.rbac.namespaces) }}"
+{{- end }}
       serviceAccountName: dapr-sentry
       volumes:
         - name: credentials
