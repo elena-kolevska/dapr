@@ -18,6 +18,7 @@ import (
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/healthz/server"
+	"github.com/dapr/dapr/pkg/legal"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
@@ -29,6 +30,9 @@ import (
 var log = logger.NewLogger("dapr.operator")
 
 func Run() {
+	// Disclaimer
+	log.Info(legal.Disclaimer)
+
 	opts := options.New()
 
 	// Apply options to all loggers.
@@ -58,7 +62,7 @@ func Run() {
 		TrustAnchorsFile:                    opts.TrustAnchorsFile,
 		LeaderElection:                      !opts.DisableLeaderElection,
 		WatchdogMaxRestartsPerMin:           opts.MaxPodRestartsPerMinute,
-		WatchNamespace:                      opts.WatchNamespace,
+		WatchNamespaces:                     opts.WatchNamespace,
 		ServiceReconcilerEnabled:            !opts.DisableServiceReconciler,
 		ArgoRolloutServiceReconcilerEnabled: opts.EnableArgoRolloutServiceReconciler,
 		WatchdogEnabled:                     opts.WatchdogEnabled,

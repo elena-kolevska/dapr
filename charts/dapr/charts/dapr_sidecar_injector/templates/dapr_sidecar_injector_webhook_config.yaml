@@ -16,6 +16,13 @@ webhooks:
       namespace: {{ .Release.Namespace }}
       name: dapr-sidecar-injector
       path: "/mutate"
+  {{- if .Values.global.rbac.namespaced }}
+  namespaceSelector:
+    matchExpressions:
+      - key: "kubernetes.io/metadata.name"
+        operator: In
+        values: [{{ ternary .Release.Namespace (.Values.global.rbac.namespaces | join ",") (empty .Values.global.rbac.namespaces) }}]
+  {{- end }}
   rules:
   - apiGroups:
     - ""

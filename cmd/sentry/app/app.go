@@ -19,6 +19,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/dapr/dapr/pkg/legal"
+
 	"github.com/dapr/dapr/cmd/sentry/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -37,6 +39,9 @@ import (
 var log = logger.NewLogger("dapr.sentry")
 
 func Run() {
+	// Disclaimer
+	log.Info(legal.Disclaimer)
+
 	opts := options.New(os.Args[1:])
 
 	// Apply options to all loggers
@@ -72,6 +77,7 @@ func Run() {
 	cfg.TrustDomain = opts.TrustDomain
 	cfg.Port = opts.Port
 	cfg.ListenAddress = opts.ListenAddress
+	cfg.AllowedNamespaces = opts.AllowedNamespaces
 
 	var (
 		watchDir    = filepath.Dir(cfg.IssuerCertPath)

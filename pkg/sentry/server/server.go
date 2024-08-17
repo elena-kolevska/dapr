@@ -59,28 +59,33 @@ type Options struct {
 
 	// Healthz is the healthz handler for the server.
 	Healthz healthz.Healthz
+
+	// AllowedNamespaces is the list of namespaces to allow to communicate with Sentry.
+	AllowedNamespaces []string
 }
 
 // Server is the gRPC server for the Sentry service.
 type Server struct {
-	port             int
-	listenAddress    string
-	sec              security.Provider
-	vals             map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator
-	defaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
-	ca               ca.Signer
-	htarget          healthz.Target
+	port              int
+	listenAddress     string
+	sec               security.Provider
+	vals              map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator
+	defaultValidator  sentryv1pb.SignCertificateRequest_TokenValidator
+	ca                ca.Signer
+	htarget           healthz.Target
+	allowedNamespaces []string
 }
 
 func New(opts Options) *Server {
 	return &Server{
-		port:             opts.Port,
-		listenAddress:    opts.ListenAddress,
-		sec:              opts.Security,
-		vals:             opts.Validators,
-		defaultValidator: opts.DefaultValidator,
-		ca:               opts.CA,
-		htarget:          opts.Healthz.AddTarget(),
+		port:              opts.Port,
+		listenAddress:     opts.ListenAddress,
+		sec:               opts.Security,
+		vals:              opts.Validators,
+		defaultValidator:  opts.DefaultValidator,
+		ca:                opts.CA,
+		htarget:           opts.Healthz.AddTarget(),
+		allowedNamespaces: opts.AllowedNamespaces,
 	}
 }
 

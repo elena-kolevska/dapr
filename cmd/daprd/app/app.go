@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/dapr/dapr/pkg/legal"
+
 	"go.uber.org/automaxprocs/maxprocs"
 
 	// Register all components
@@ -54,6 +56,8 @@ var (
 )
 
 func Run() {
+	// Disclaimer
+	log.Info(legal.Disclaimer)
 	// set GOMAXPROCS
 	_, _ = maxprocs.Set()
 

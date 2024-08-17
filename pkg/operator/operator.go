@@ -68,7 +68,7 @@ type Options struct {
 	WatchdogEnabled                     bool
 	WatchdogInterval                    time.Duration
 	WatchdogMaxRestartsPerMin           int
-	WatchNamespace                      string
+	WatchNamespaces                     string
 	ServiceReconcilerEnabled            bool
 	ArgoRolloutServiceReconcilerEnabled bool
 	WatchdogCanPatchPodLabels           bool
@@ -156,9 +156,12 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		},
 		LeaderElection:                opts.LeaderElection,
 		LeaderElectionID:              "operator.dapr.io",
-		NewCache:                      operatorcache.GetFilteredCache(opts.WatchNamespace, watchdogPodSelector),
+		NewCache:                      operatorcache.GetFilteredCache(opts.WatchNamespaces, watchdogPodSelector),
 		LeaderElectionReleaseOnCancel: true,
 	})
+	if len(opts.WatchNamespaces) > 0 {
+		log.Infof("Watching Workload namespaces: %s", opts.WatchNamespaces)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("unable to start manager: %w", err)
 	}
