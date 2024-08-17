@@ -20,7 +20,8 @@ import sys
 import datetime
 
 gitRef = os.getenv("GITHUB_REF")
-tagRefPrefix = "refs/tags/official"
+# we created a tag called `official-<version>` to tag the release
+tagRefPrefix = "refs/tags/official-"
 
 with open(os.getenv("GITHUB_ENV"), "a") as githubEnv:
 
@@ -36,11 +37,12 @@ with open(os.getenv("GITHUB_ENV"), "a") as githubEnv:
         sys.exit(0)
 
     releaseVersion = gitRef[len(tagRefPrefix):]
-    releaseNotePath="docs/release_notes/v{}.md".format(releaseVersion)
 
     if gitRef.find("-rc.") > 0:
         print ("Release Candidate build from {}...".format(gitRef))
     else:
+        daprReleaseVersion = re.sub( r'-diagrid.*$', '', releaseVersion)
+        releaseNotePath="docs/release_notes/{}.md".format(daprReleaseVersion)
         print ("Checking if {} exists".format(releaseNotePath))
         if os.path.exists(releaseNotePath):
             print ("Found {}".format(releaseNotePath))
