@@ -154,3 +154,16 @@ func ParseServiceAddr(val string) []string {
 	}
 	return p
 }
+
+// CSVToSlice converts a comma-separated string to a slice of strings, trimming any spaces found
+func CSVToSlice(s string) []string {
+	sTrim := strings.TrimSpace(s)
+	if sTrim == "" {
+		return nil
+	}
+	p := strings.Split(s, ",")
+	for i, v := range p {
+		p[i] = strings.TrimSpace(v)
+	}
+	return p
+}

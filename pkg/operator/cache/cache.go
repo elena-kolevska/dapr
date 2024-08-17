@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatormeta "github.com/dapr/dapr/pkg/operator/meta"
+	"github.com/dapr/dapr/utils"
 )
 
 var (
@@ -40,14 +41,20 @@ var (
 // - deploy/sts -> template.spec, status, managedfields (we only care about template/metadata except for injector deployment)
 func GetFilteredCache(namespace string, podSelector labels.Selector) cache.NewCacheFunc {
 	return func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
-		// The only pods we are interested are in watchdog. we don't need to
-		// list/watch pods that we are almost sure have dapr sidecar already.
-		opts.ByObject = getTransformerFunctions(podSelector)
-		if len(namespace) > 0 {
-			opts.DefaultNamespaces = map[string]cache.Config{
-				namespace: {},
+		// create namespace map to filter resources by (if any)
+		var namespaceWatch map[string]cache.Config
+		namespaces := utils.CSVToSlice(namespace)
+		if len(namespaces) > 0 {
+			namespaceWatch = make(map[string]cache.Config)
+			for _, ns := range namespaces {
+				namespaceWatch[ns] = cache.Config{}
 			}
 		}
+
+		// The only pods we are interested are in watchdog. we don't need to
+		// list/watch pods that we are almost sure have dapr sidecar already.
+		opts.ByObject = getTransformerFunctions(podSelector, namespaceWatch)
+		opts.DefaultNamespaces = namespaceWatch
 		return cache.New(config, opts)
 	}
 }
@@ -55,10 +62,11 @@ func GetFilteredCache(namespace string, podSelector labels.Selector) cache.NewCa
 // getTransformerFunctions creates transformers that are called by the DeltaFifo before they are inserted in the cache
 // the transformations here try to reduce size of objects, and for some others objects that we don't care about (non-dapr)
 // we set all these objects to store a single one, a sort of sinkhole
-func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cache.ByObject {
+func getTransformerFunctions(podSelector labels.Selector, namespaces map[string]cache.Config) map[client.Object]cache.ByObject {
 	return map[client.Object]cache.ByObject{
 		&corev1.Pod{}: {
-			Label: podSelector,
+			Label:      podSelector,
+			Namespaces: namespaces,
 			Transform: func(i any) (any, error) {
 				obj, ok := i.(*corev1.Pod)
 				if !ok { // probably deletedfinalstateunknown
@@ -76,6 +84,7 @@ func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cach
 			},
 		},
 		&appsv1.Deployment{}: {
+			Namespaces: namespaces,
 			Transform: func(i any) (any, error) {
 				obj, ok := i.(*appsv1.Deployment)
 				if !ok {
@@ -101,6 +110,7 @@ func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cach
 			},
 		},
 		&appsv1.StatefulSet{}: {
+			Namespaces: namespaces,
 			Transform: func(i any) (any, error) {
 				obj, ok := i.(*appsv1.StatefulSet)
 				if !ok {

@@ -18,6 +18,8 @@ import (
 	"math"
 	"os"
 
+	"github.com/dapr/dapr/pkg/legal"
+
 	"github.com/dapr/dapr/cmd/placement/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -37,6 +39,9 @@ import (
 var log = logger.NewLogger("dapr.placement")
 
 func Run() {
+	// Disclaimer
+	log.Info(legal.Disclaimer)
+
 	opts := options.New(os.Args[1:])
 
 	// Apply options to all loggers.

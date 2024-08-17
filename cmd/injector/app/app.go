@@ -18,6 +18,8 @@ import (
 	"encoding/base64"
 	"os"
 
+	"github.com/dapr/dapr/pkg/legal"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -39,6 +41,8 @@ import (
 var log = logger.NewLogger("dapr.injector")
 
 func Run() {
+	// Disclaimer
+	log.Info(legal.Disclaimer)
 	opts := options.New(os.Args[1:])
 
 	// Apply options to all loggers
@@ -84,9 +88,14 @@ func Run() {
 	if err != nil {
 		log.Fatalf("Error creating Dapr client: %v", err)
 	}
-	uids, err := service.AllowedControllersServiceAccountUID(ctx, cfg, kubeClient)
-	if err != nil {
-		log.Fatalf("Failed to get authentication uids from services accounts: %s", err)
+	var uids, usernames []string
+	if cfg.GetPreferUsernameOverAuth() {
+		usernames = service.AllowedControllersServiceAccountUsernames(cfg)
+	} else {
+		uids, err = service.AllowedControllersServiceAccountUID(ctx, cfg, kubeClient)
+		if err != nil {
+			log.Fatalf("Failed to get authentication uids from services accounts: %s", err)
+		}
 	}
 
 	namespace, err := security.CurrentNamespaceOrError()
@@ -112,6 +121,7 @@ func Run() {
 		Port:                    opts.Port,
 		ListenAddress:           opts.ListenAddress,
 		AuthUIDs:                uids,
+		AuthUsernames:           usernames,
 		Config:                  cfg,
 		DaprClient:              daprClient,
 		KubeClient:              kubeClient,

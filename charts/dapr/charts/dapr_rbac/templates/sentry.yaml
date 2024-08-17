@@ -11,7 +11,7 @@ metadata:
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: dapr-sentry
+  name: dapr-sentry-token-reviewer
   labels:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
@@ -20,14 +20,35 @@ rules:
   - apiGroups: ["authentication.k8s.io"]
     resources: ["tokenreviews"]
     verbs: ["create"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-sentry-token-reviewer
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+subjects:
+- kind: ServiceAccount
+  name: dapr-sentry
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dapr-sentry-token-reviewer
+---
 {{- if not .Values.global.rbac.namespaced }}
-  - apiGroups: ["dapr.io"]
-    resources: ["configurations"]
-    verbs: ["list", "get", "watch"]
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["list", "get", "watch"]
-{{- end }}
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-sentry
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+rules:
+{{-   include "dapr_rbac.sentry_rules" $ }}
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -45,6 +66,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: dapr-sentry
+{{- end }}
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
@@ -64,9 +86,7 @@ rules:
     resources: ["configmaps"]
     verbs: ["get", "update", "watch", "list"]
     resourceNames: ["dapr-trust-bundle"]
-  - apiGroups: ["dapr.io"]
-    resources: ["configurations"]
-    verbs: ["list", "get", "watch"]
+  {{ include "dapr_rbac.sentry_rules" . }}
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -85,3 +105,40 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: dapr-sentry
+{{- /* start namespaces loop */}}
+{{- if eq .Values.global.rbac.namespaced true }}
+{{- /* loop through all namespaces, if namespaces is not provided use current dapr namespace */}}
+{{-   range $ns := ternary (list .Release.Namespace) .Values.global.rbac.namespaces (empty .Values.global.rbac.namespaces) }}
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-sentry-namespaced
+  namespace: {{ $ns }}
+  labels:
+    {{- range $key, $value := $.Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+rules:
+{{-   include "dapr_rbac.sentry_rules" $ }}
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-sentry-namespaced
+  namespace: {{ $ns }}
+  labels:
+    {{- range $key, $value := $.Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+subjects:
+- kind: ServiceAccount
+  name: dapr-sentry
+  namespace: {{ $.Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dapr-sentry-namespaced
+{{-   end }}
+{{- end }}
+{{- /* end namespaces loop */}}

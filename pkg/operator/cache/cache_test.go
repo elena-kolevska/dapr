@@ -32,7 +32,7 @@ func convertToByGVK[T any](byObject map[client.Object]T) (map[schema.GroupVersio
 }
 
 func getObjectTransformer(t *testing.T, o client.Object) kcache.TransformFunc {
-	transformers := getTransformerFunctions(nil)
+	transformers := getTransformerFunctions(nil, nil)
 	transformerByGVK, err := convertToByGVK(transformers)
 	require.NoError(t, err)
 
