@@ -104,16 +104,19 @@ func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
 		return nil, fmt.Errorf("error creating security: %s", err)
 	}
 
+	allowedNamespaces := utils.CSVToSlice(opts.Config.AllowedNamespaces)
+
 	// Start all background processes
 	runners := concurrency.NewRunnerManager(
 		sec.Run,
 		server.New(server.Options{
-			Port:             opts.Config.Port,
-			Security:         sec,
-			Validators:       vals,
-			DefaultValidator: opts.Config.DefaultValidator,
-			CA:               camngr,
-			Healthz:          opts.Healthz,
+			Port:              opts.Config.Port,
+			Security:          sec,
+			Validators:        vals,
+			DefaultValidator:  opts.Config.DefaultValidator,
+			CA:                camngr,
+			Healthz:           opts.Healthz,
+			AllowedNamespaces: allowedNamespaces,
 		}).Start,
 	)
 	for name, val := range vals {
@@ -156,16 +159,21 @@ func buildValidators(opts Options) (map[sentryv1pb.SignCertificateRequest_TokenV
 			if err != nil {
 				return nil, err
 			}
+			allowedNamespaces := utils.CSVToSlice(opts.Config.AllowedNamespaces)
 			val, err := validatorKube.New(validatorKube.Options{
-				RestConfig:     utils.GetConfig(),
-				SentryID:       sentryID,
-				ControlPlaneNS: security.CurrentNamespace(),
-				Healthz:        opts.Healthz,
+				RestConfig:        utils.GetConfig(),
+				SentryID:          sentryID,
+				ControlPlaneNS:    security.CurrentNamespace(),
+				Healthz:           opts.Healthz,
+				AllowedNamespaces: allowedNamespaces,
 			})
 			if err != nil {
 				return nil, err
 			}
 			log.Info("Adding validator 'kubernetes' with Sentry ID: " + sentryID.String())
+			if len(allowedNamespaces) > 0 {
+				log.Infof("Workloads allowed namespaces: %s", strings.Join(allowedNamespaces, ", "))
+			}
 			validators[validatorID] = val
 
 		case sentryv1pb.SignCertificateRequest_INSECURE:

@@ -159,9 +159,9 @@ spec:
 {{- else }}
         - "--enable-metrics=false"
 {{- end }}
-{{- if .Values.watchNamespace }}
+{{- if eq .Values.global.rbac.namespaced true }}
         - "--watch-namespace"
-        - "{{ .Values.watchNamespace }}"
+        - "{{ ternary .Release.Namespace (.Values.global.rbac.namespaces | join ",") (empty .Values.global.rbac.namespaces) }}"
 {{- end }}
 {{- if not .Values.serviceReconciler.enabled }}
         - "--disable-service-reconciler"

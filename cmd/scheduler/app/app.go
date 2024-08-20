@@ -17,6 +17,8 @@ import (
 	"context"
 	"os"
 
+	"github.com/dapr/dapr/pkg/legal"
+
 	"github.com/dapr/dapr/cmd/scheduler/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -36,6 +38,9 @@ var log = logger.NewLogger("dapr.scheduler")
 const appID = "dapr-scheduler"
 
 func Run() {
+	// Disclaimer
+	log.Info(legal.Disclaimer)
+
 	opts, err := options.New(os.Args[1:])
 	if err != nil {
 		log.Fatal(err)

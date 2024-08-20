@@ -43,6 +43,7 @@ type Config struct {
 	ReadOnlyRootFilesystem            string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
 	EnableK8sDownwardAPIs             string `envconfig:"ENABLE_K8S_DOWNWARD_APIS"`
 	SidecarDropALLCapabilities        string `envconfig:"SIDECAR_DROP_ALL_CAPABILITIES"`
+	PreferUsernameAuth                string `envconfig:"PREFER_USERNAME_AUTH"`
 
 	TrustAnchorsFile        string `envconfig:"DAPR_TRUST_ANCHORS_FILE"`
 	ControlPlaneTrustDomain string `envconfig:"DAPR_CONTROL_PLANE_TRUST_DOMAIN"`
@@ -56,6 +57,7 @@ type Config struct {
 	parsedEnableK8sDownwardAPIs      bool
 	parsedSidecarDropALLCapabilities bool
 	parsedEntrypointTolerations      []corev1.Toleration
+	preferUsernameAuth               bool
 }
 
 // NewConfigWithDefaults returns a Config object with default values already
@@ -135,6 +137,10 @@ func (c Config) GetActorsEnabled() bool {
 	return c.parsedActorsEnabled
 }
 
+func (c Config) GetPreferUsernameOverAuth() bool {
+	return c.preferUsernameAuth
+}
+
 func (c Config) GetActorsService() (string, patcher.Service) {
 	return c.ActorsServiceName, c.parsedActorsService
 }
@@ -177,6 +183,7 @@ func (c *Config) parse() (err error) {
 	c.parsedReadOnlyRootFilesystem = isTruthyDefaultTrue(c.ReadOnlyRootFilesystem)
 	c.parsedEnableK8sDownwardAPIs = kitutils.IsTruthy(c.EnableK8sDownwardAPIs)
 	c.parsedSidecarDropALLCapabilities = kitutils.IsTruthy(c.SidecarDropALLCapabilities)
+	c.preferUsernameAuth = kitutils.IsTruthy(c.PreferUsernameAuth)
 
 	return nil
 }
