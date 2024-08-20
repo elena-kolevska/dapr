@@ -26,6 +26,8 @@ global:
   tolerations: []
   rbac:
     namespaced: false
+    namespaces: []
+    createTokenReviewerRole: false
   ha:
     enabled: false
     replicaCount: 3

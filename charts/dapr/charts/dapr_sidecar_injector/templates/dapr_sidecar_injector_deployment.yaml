@@ -189,6 +189,10 @@ spec:
         - name: ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES
           value: {{ .Values.allowedServiceAccountsPrefixNames | toYaml }}
 {{- end }}
+{{- if .Values.preferUsernameAuthOverUID }}
+        - name: PREFER_USERNAME_AUTH
+          value: "true"
+{{- end }}
         ports:
         - name: https
           containerPort: 4000

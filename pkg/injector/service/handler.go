@@ -61,7 +61,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Errorf("Can't decode body: %v", err)
 	} else {
-		allowServiceAccountUser := i.allowServiceAccountUser(ar.Request.UserInfo.Username)
+		allowServiceAccountUser := i.allowServiceAccountUser(ar.Request.UserInfo.Username) || utils.Contains(i.authUsernames, ar.Request.UserInfo.Username)
 
 		if !(allowServiceAccountUser || utils.Contains(i.authUIDs, ar.Request.UserInfo.UID) || utils.Contains(ar.Request.UserInfo.Groups, systemGroup)) {
 			log.Errorf("service account '%s' not on the list of allowed controller accounts", ar.Request.UserInfo.Username)

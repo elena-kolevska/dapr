@@ -9,13 +9,41 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 {{- end }}
----
+{{- /* TODO: why do we need a role with empty rules??? */}}
 {{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
-{{- if eq .Values.global.rbac.namespaced true }}
+{{-   if eq .Values.global.rbac.namespaced true }}
+---
 kind: Role
-{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-placement
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+rules: []
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-placement
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+subjects:
+- kind: ServiceAccount
+  name: dapr-placement
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dapr-placement
+{{-   else }}
+---
 kind: ClusterRole
-{{- end }}
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-placement
@@ -24,14 +52,8 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 rules: []
-{{- end }}
 ---
-{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
-{{- if eq .Values.global.rbac.namespaced true }}
-kind: RoleBinding
-{{- else }}
 kind: ClusterRoleBinding
-{{- end }}
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-placement
@@ -45,10 +67,7 @@ subjects:
   namespace: {{ .Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-{{- if eq .Values.global.rbac.namespaced true }}
-  kind: Role
-{{- else }}
   kind: ClusterRole
-{{- end }}
   name: dapr-placement
+{{-   end }}
 {{- end }}

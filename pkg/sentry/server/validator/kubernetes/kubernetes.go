@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/dapr/dapr/utils"
+
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	kauthapi "k8s.io/api/authentication/v1"
@@ -56,22 +58,24 @@ const (
 )
 
 type Options struct {
-	RestConfig     *rest.Config
-	SentryID       spiffeid.ID
-	ControlPlaneNS string
-	Healthz        healthz.Healthz
+	RestConfig        *rest.Config
+	SentryID          spiffeid.ID
+	ControlPlaneNS    string
+	Healthz           healthz.Healthz
+	AllowedNamespaces []string
 }
 
 // kubernetes implements the validator.Interface. It validates the request by
 // doing a Kubernetes token review.
 type kubernetes struct {
-	auth           clauthv1.AuthenticationV1Interface
-	client         client.Reader
-	ready          func(context.Context) bool
-	sentryAudience string
-	controlPlaneNS string
-	controlPlaneTD spiffeid.TrustDomain
-	htarget        healthz.Target
+	auth              clauthv1.AuthenticationV1Interface
+	client            client.Reader
+	ready             func(context.Context) bool
+	sentryAudience    string
+	controlPlaneNS    string
+	controlPlaneTD    spiffeid.TrustDomain
+	htarget           healthz.Target
+	allowedNamespaces []string
 }
 
 func New(opts Options) (validator.Validator, error) {
@@ -88,19 +92,30 @@ func New(opts Options) (validator.Validator, error) {
 		return nil, err
 	}
 
-	cache, err := cache.New(opts.RestConfig, cache.Options{Scheme: scheme})
+	var namespaceWatch map[string]cache.Config
+	if len(opts.AllowedNamespaces) > 0 {
+		namespaceWatch = make(map[string]cache.Config)
+		for _, ns := range opts.AllowedNamespaces {
+			namespaceWatch[ns] = cache.Config{}
+		}
+		// always include the control plane namespace to validate
+		namespaceWatch[opts.ControlPlaneNS] = cache.Config{}
+	}
+
+	cache, err := cache.New(opts.RestConfig, cache.Options{Scheme: scheme, DefaultNamespaces: namespaceWatch})
 	if err != nil {
 		return nil, err
 	}
 
 	return &kubernetes{
-		auth:           kubeClient.AuthenticationV1(),
-		client:         cache,
-		ready:          cache.WaitForCacheSync,
-		sentryAudience: opts.SentryID.String(),
-		controlPlaneNS: opts.ControlPlaneNS,
-		controlPlaneTD: opts.SentryID.TrustDomain(),
-		htarget:        opts.Healthz.AddTarget(),
+		auth:              kubeClient.AuthenticationV1(),
+		client:            cache,
+		ready:             cache.WaitForCacheSync,
+		sentryAudience:    opts.SentryID.String(),
+		controlPlaneNS:    opts.ControlPlaneNS,
+		controlPlaneTD:    opts.SentryID.TrustDomain(),
+		htarget:           opts.Healthz.AddTarget(),
+		allowedNamespaces: opts.AllowedNamespaces,
 	}, nil
 }
 
@@ -150,6 +165,12 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	}
 
 	saNamespace := prts[2]
+	// allowedNamespaces allow all when empty (kind of similar to netpols). Permit all if the namespace is the control plane namespace.
+	if len(k.allowedNamespaces) > 0 && saNamespace != k.controlPlaneNS {
+		if !utils.Contains(k.allowedNamespaces, saNamespace) {
+			return spiffeid.TrustDomain{}, fmt.Errorf("namespace %s is not allowed. Allowed namespaces are: %s", saNamespace, strings.Join(k.allowedNamespaces, ", "))
+		}
+	}
 
 	// We have already validated to the token against Kubernetes API server, so
 	// we do not need to supply a key.
