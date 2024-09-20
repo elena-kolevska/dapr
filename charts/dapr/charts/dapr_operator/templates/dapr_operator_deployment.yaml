@@ -93,6 +93,83 @@ spec:
         - name: "{{ $name }}"
           value: "{{ $value }}"
         {{- end }}
+{{- if .Values.global.rbac.useOperatorAsInjector }}
+{{- /* Beginning Embedding Injector Env Vars */}}
+        - name: DAPR_TRUST_ANCHORS_FILE
+          value: /var/run/secrets/dapr.io/tls/ca.crt
+        - name: DAPR_CONTROL_PLANE_TRUST_DOMAIN
+          value: {{ .Values.global.mtls.controlPlaneTrustDomain | toYaml }}
+        - name: DAPR_SENTRY_ADDRESS
+          value: {{ with .Values.global.mtls.sentryAddress }}{{ . }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}
+        {{- range $name, $value := .Values.extraEnvVars }}
+        - name: {{ $name | toYaml }}
+          value: {{ $value | toString | toYaml }}
+        {{- end }}
+{{-   if .Values.kubeClusterDomain }}
+        - name: KUBE_CLUSTER_DOMAIN
+          value: {{ .Values.kubeClusterDomain | toYaml }}
+{{-   end }}
+        - name: SIDECAR_IMAGE
+{{-   if contains "/" .Values.sidecarImageName }}
+          value: {{ .Values.sidecarImageName | toYaml }}
+{{-   else }}
+          value: "{{ .Values.global.registry }}/{{ .Values.sidecarImageName }}:{{ .Values.global.tag }}"
+{{-   end }}
+        - name: SIDECAR_IMAGE_PULL_POLICY
+          value: {{ .Values.sidecarImagePullPolicy | toYaml }}
+        # Configuration for injected sidecars
+        - name: SIDECAR_RUN_AS_NON_ROOT
+          value: {{ .Values.sidecarRunAsNonRoot | toString | toYaml }}
+        - name: ENABLE_K8S_DOWNWARD_APIS
+          value: {{ .Values.enableK8sDownwardAPIs | toString | toYaml }}
+        - name: SIDECAR_DROP_ALL_CAPABILITIES
+          value: {{ .Values.sidecarDropALLCapabilities | toString | toYaml }}
+        - name: SIDECAR_READ_ONLY_ROOT_FILESYSTEM
+          value: {{ .Values.sidecarReadOnlyRootFilesystem | toString | toYaml }}
+
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+
+{{-   if .Values.ignoreEntrypointTolerations }}
+        - name: IGNORE_ENTRYPOINT_TOLERATIONS
+          value: {{ .Values.ignoreEntrypointTolerations | toYaml }}
+{{-   end }}
+
+        # Configuration for actors and reminders
+        - name: ACTORS_ENABLED
+          value: {{ .Values.global.actors.enabled | toString | toYaml }}
+        - name: ACTORS_SERVICE_NAME
+          value: {{ .Values.global.actors.serviceName | toString | toYaml }}
+        - name: ACTORS_SERVICE_ADDRESS
+          value: {{ include (print "address." .Values.global.actors.serviceName) . | toString | toYaml }}
+{{-   with .Values.global.reminders.serviceName }}
+        - name: REMINDERS_SERVICE_NAME
+          value: {{ . | toString | toYaml }}
+        - name: REMINDERS_SERVICE_ADDRESS
+          value: {{ include (print "address." .) . | toString | toYaml }}
+{{-   end }}
+
+{{-   if .Values.allowedServiceAccounts }}
+        - name: ALLOWED_SERVICE_ACCOUNTS
+          value: {{ .Values.allowedServiceAccounts | toYaml }}
+{{-   end }}
+{{-   if .Values.allowedServiceAccountsPrefixNames }}
+        - name: ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES
+          value: {{ .Values.allowedServiceAccountsPrefixNames | toYaml }}
+{{-   end }}
+{{-   if .Values.preferUsernameAuthOverUID }}
+        - name: PREFER_USERNAME_AUTH
+          value: "true"
+{{-   end }}
+{{- /* End Embedding Injector Env Vars */}}
+{{- end }}
+{{- if eq .Values.global.operator.skipCRDConversion true }}
+        {{- /* Disable Conversion Webhook */}}
+        - name: "ENABLE_WEBHOOKS"
+          value: "false"
+{{- end }}
         ports:
         - containerPort: 6500
 {{- if eq .Values.global.prometheus.enabled true }}
@@ -159,9 +236,9 @@ spec:
 {{- else }}
         - "--enable-metrics=false"
 {{- end }}
-{{- if .Values.watchNamespace }}
+{{- if eq .Values.global.rbac.namespaced true }}
         - "--watch-namespace"
-        - "{{ .Values.watchNamespace }}"
+        - "{{ ternary .Release.Namespace (.Values.global.rbac.namespaces | join ",") (empty .Values.global.rbac.namespaces) }}"
 {{- end }}
 {{- if not .Values.serviceReconciler.enabled }}
         - "--disable-service-reconciler"
@@ -171,6 +248,9 @@ spec:
 {{- end }}
 {{- if .Values.global.operator.watchdogCanPatchPodLabels }}
         - "--watchdog-can-patch-pod-labels"
+{{- end }}
+{{- if .Values.global.rbac.useOperatorAsInjector }}
+        - "--use-as-injector"
 {{- end }}
       serviceAccountName: dapr-operator
       volumes:

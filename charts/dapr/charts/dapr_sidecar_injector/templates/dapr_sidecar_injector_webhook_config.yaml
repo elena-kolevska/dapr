@@ -1,4 +1,4 @@
-{{- if eq .Values.enabled true }}
+{{- if and (eq .Values.enabled true) (not .Values.global.rbac.useOperatorAsInjector) }}
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
@@ -16,6 +16,13 @@ webhooks:
       namespace: {{ .Release.Namespace }}
       name: dapr-sidecar-injector
       path: "/mutate"
+  {{- if .Values.global.rbac.namespaced }}
+  namespaceSelector:
+    matchExpressions:
+      - key: "kubernetes.io/metadata.name"
+        operator: In
+        values: [{{ ternary .Release.Namespace (.Values.global.rbac.namespaces | join ",") (empty .Values.global.rbac.namespaces) }}]
+  {{- end }}
   rules:
   - apiGroups:
     - ""

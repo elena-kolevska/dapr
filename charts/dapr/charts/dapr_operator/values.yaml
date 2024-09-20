@@ -1,7 +1,6 @@
 replicaCount: 1
 logLevel: info
 watchInterval: "0"
-watchNamespace: ""
 maxPodRestartsPerMinute: 20
 component: operator
 
@@ -50,3 +49,19 @@ debug:
   enabled: false
   port: 40000
   initialDelaySeconds: 30000
+
+###################
+# Injector Config #
+sidecarImagePullPolicy: IfNotPresent
+sidecarImageName: "daprd"
+sidecarRunAsNonRoot: true
+sidecarReadOnlyRootFilesystem: true
+sidecarDropALLCapabilities: false
+enableK8sDownwardAPIs: false
+allowedServiceAccounts: ""
+allowedServiceAccountsPrefixNames: ""
+preferUsernameAuthOverUID: true
+kubeClusterDomain: cluster.local
+ignoreEntrypointTolerations: "[{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"alibabacloud.com/eci\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"azure.com/aci\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"aws\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"huawei.com/cci\\\"}]"
+hostNetwork: false
+###################

@@ -1,4 +1,4 @@
-{{- if eq .Values.enabled true }}
+{{- if and (eq .Values.enabled true) (not .Values.global.rbac.useOperatorAsInjector) }}
 apiVersion: v1
 kind: Service
 metadata:
