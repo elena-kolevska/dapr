@@ -1,3 +1,4 @@
+{{- if not .Values.global.rbac.useOperatorAsInjector }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -7,6 +8,39 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
+{{- /* To update the CA in our Mutating Webhook by ourselves */}}
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-injector-mutating-patcher-{{ .Release.Namespace }}
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+rules:
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations"]
+    verbs: ["patch"]
+    resourceNames: ["dapr-sidecar-injector"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: dapr-injector-mutating-patcher-{{ .Release.Namespace }}
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+subjects:
+  - kind: ServiceAccount
+    name: dapr-injector
+    namespace: {{ .Release.Namespace }}
+roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: dapr-injector-mutating-patcher-{{ .Release.Namespace }}
+{{- if not .Values.global.rbac.namespaced }}
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
@@ -20,15 +54,9 @@ rules:
   - apiGroups: [""]
     resources: ["serviceaccounts"]
     verbs: ["get", "list"]
-  - apiGroups: ["admissionregistration.k8s.io"]
-    resources: ["mutatingwebhookconfigurations"]
-    verbs: ["patch"]
-    resourceNames: ["dapr-sidecar-injector"]
-{{- if not .Values.global.rbac.namespaced }}
   - apiGroups: ["dapr.io"]
     resources: ["components"]
     verbs: [ "get", "list"]
-{{- end }}
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -46,6 +74,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: dapr-injector
+{{- end }}
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
@@ -62,6 +91,9 @@ rules:
     verbs: ["get"]
     resourceNames: ["dapr-trust-bundle"]
 {{- if eq .Values.global.rbac.namespaced true }}
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list"]
   - apiGroups: ["dapr.io"]
     resources: ["components"]
     verbs: [ "get", "list"]
@@ -70,13 +102,14 @@ rules:
     resources: ["configurations"]
     verbs: [ "get" ]
   - apiGroups: ["apps"]
-    resources: ["statefulsets"]
+    resources: ["statefulsets"] {{- /* needed to get schedulers' info */}}
     verbs: [ "get" ]
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: dapr-injector
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
@@ -89,3 +122,4 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: dapr-injector
+{{- end }}

@@ -25,7 +25,14 @@ global:
   nodeSelector: {}
   tolerations: []
   rbac:
-    namespaced: false
+    # if true, limit the usage of cluster roles to the minimum required to run in one or a few namespaces.
+    namespaced: true
+    # workload namespaces (if empty but namespaced is true, use dapr namespace for workloads)
+    namespaces: []
+    # we'll create the tokenreview instead of depending on the system:auth-delegator
+    createTokenReviewerRole: false
+    # we'll use the operator in-leu of the injector. The injector will not be created nor any webhook it requires.
+    useOperatorAsInjector: true
   ha:
     enabled: false
     replicaCount: 3
@@ -97,3 +104,6 @@ global:
 
   operator:
     watchdogCanPatchPodLabels: false
+    # set to true as the CRD itself is not set for conversion, and files in /crd folder cannot be templated.
+    # DO NOT CHANGE THIS VALUE
+    skipCRDConversion: true

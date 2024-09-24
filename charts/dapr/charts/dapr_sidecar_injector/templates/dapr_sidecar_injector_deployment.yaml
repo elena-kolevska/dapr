@@ -1,4 +1,4 @@
-{{- if eq .Values.enabled true }}
+{{- if and (eq .Values.enabled true) (not .Values.global.rbac.useOperatorAsInjector) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -202,6 +202,10 @@ spec:
 {{- if .Values.allowedServiceAccountsPrefixNames }}
         - name: ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES
           value: {{ .Values.allowedServiceAccountsPrefixNames | toYaml }}
+{{- end }}
+{{- if .Values.preferUsernameAuthOverUID }}
+        - name: PREFER_USERNAME_AUTH
+          value: "true"
 {{- end }}
         ports:
         - name: https

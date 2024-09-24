@@ -1,4 +1,4 @@
-{{- if eq .Values.enabled true }}
+{{- if and (eq .Values.enabled true) (not .Values.global.rbac.useOperatorAsInjector) }}
 {{- if eq .Values.global.ha.enabled true }}
 {{- if .Capabilities.APIVersions.Has "policy/v1" }}
 apiVersion: policy/v1
