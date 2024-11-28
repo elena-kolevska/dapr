@@ -325,8 +325,7 @@ func (p *Service) disseminateOperationOnHosts(ctx context.Context, req *tablesUp
 }
 
 func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, operation string, tables *v1pb.PlacementTables) error {
-	fmt.Println("---------------------------")
-	fmt.Printf("\n\n\n\ndisseminateOperation %s on target: %#v\n", operation, target)
+	fmt.Printf("disseminateOperation %s on target: %#v\n", operation, target)
 
 	o := &v1pb.PlacementOrder{
 		Operation: operation,
@@ -363,6 +362,15 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 
 		select {
 		case <-sendCtx.Done():
+			// This code path is reached when the stream hangs or is slow to respond
+			// This can happen in some environments when the sidecar is not properly shutdown, or
+			// the sidecar is unresponsive, so the stream buffer fills up
+			// In this case, we should not wait for the stream to respond, but instead return an error
+			// and close the stream
+			if target.cancelFn != nil {
+				target.cancelFn()
+			}
+
 			return fmt.Errorf("\ntimeout sending to target %s", target.hostID)
 		case err := <-errCh:
 			if err != nil {

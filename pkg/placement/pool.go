@@ -14,6 +14,7 @@ limitations under the License.
 package placement
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,15 +31,17 @@ type daprdStream struct {
 	hostNamespace string
 	needsVNodes   bool
 	stream        placementv1pb.Placement_ReportDaprStatusServer
+	cancelFn      context.CancelFunc
 }
 
-func newDaprdStream(host *placementv1pb.Host, stream placementv1pb.Placement_ReportDaprStatusServer) *daprdStream {
+func newDaprdStream(host *placementv1pb.Host, stream placementv1pb.Placement_ReportDaprStatusServer, cancel context.CancelFunc) *daprdStream {
 	return &daprdStream{
 		hostID:        host.GetId(),
 		hostName:      host.GetName(),
 		hostNamespace: host.GetNamespace(),
 		stream:        stream,
 		needsVNodes:   hostNeedsVNodes(stream),
+		cancelFn:      cancel,
 	}
 }
 

@@ -278,7 +278,10 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	// so we'll save this one in a separate variable
 	namespace := firstMessage.GetNamespace()
 
-	daprStream := newDaprdStream(firstMessage, stream)
+	_, cancel := context.WithCancel(stream.Context())
+	defer cancel()
+
+	daprStream := newDaprdStream(firstMessage, stream, cancel)
 	p.streamConnGroup.Add(1)
 	p.streamConnPool.add(daprStream)
 
