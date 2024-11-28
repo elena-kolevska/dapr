@@ -18,6 +18,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -215,32 +217,48 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.shutdownConnLoop.Add(1)
 	go func() {
 		defer p.shutdownConnLoop.Done()
+		i := 0
 		for p.running.Load() {
 			// Wait until stream is connected or shutdown is triggered.
 			p.client.waitUntil(func(streamAlive bool) bool {
 				return streamAlive || !p.running.Load()
 			})
 
-			resp, err := p.client.recv()
-			if !p.running.Load() {
-				break
+			i++
+
+			m := os.Getenv("TEST_MAX_DISSEMINATIONS")
+			x, _ := strconv.Atoi(m)
+			//fmt.Println("---------------------------")
+			//fmt.Println("---------------------------")
+			//fmt.Printf("i: %d, max= %d\n", i, x)
+			if i < x {
+
+				resp, err := p.client.recv()
+				if !p.running.Load() {
+					break
+				}
+
+				fmt.Println("Reading...\n\n\n")
+
+				// TODO: we may need to handle specific errors later.
+				if err != nil {
+					closeConnection := true
+					if s, ok := status.FromError(err); ok && s.Code() == codes.FailedPrecondition {
+						// If the current server is not leader, then it will try the next server
+						// without closing the connection because we might need to reuse it if we're
+						// dialing the placement headless service
+						closeConnection = false
+					}
+					p.client.disconnectFn(func() {
+						p.onPlacementError(err) // depending on the returned error a new server could be used
+					}, closeConnection)
+				} else {
+					p.onPlacementOrder(resp)
+				}
 			}
 
-			// TODO: we may need to handle specific errors later.
-			if err != nil {
-				closeConnection := true
-				if s, ok := status.FromError(err); ok && s.Code() == codes.FailedPrecondition {
-					// If the current server is not leader, then it will try the next server
-					// without closing the connection because we might need to reuse it if we're
-					// dialing the placement headless service
-					closeConnection = false
-				}
-				p.client.disconnectFn(func() {
-					p.onPlacementError(err) // depending on the returned error a new server could be used
-				}, closeConnection)
-			} else {
-				p.onPlacementOrder(resp)
-			}
+			time.Sleep(1 * time.Second)
+
 		}
 	}()
 

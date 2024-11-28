@@ -336,7 +336,7 @@ func (r *statestore) evaluateReminders(ctx context.Context) {
 			continue
 		}
 
-		log.Debugf("Loaded %d reminders for actor type %s", len(vals), t)
+		//log.Debugf("Loaded %d reminders for actor type %s", len(vals), t)
 		r.remindersLock.Lock()
 		r.reminders[t] = vals
 		r.remindersLock.Unlock()
@@ -775,9 +775,9 @@ func (r *statestore) getRemindersForActorType(ctx context.Context, actorType str
 		policyDef = noOp.EndpointPolicy("", "")
 	}
 
-	log.Debugf(
-		"Starting to read reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions",
-		actorType, migrate, actorMetadata.ID, actorMetadata.RemindersMetadata.PartitionCount)
+	//log.Debugf(
+	//	"Starting to read reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions",
+	//	actorType, migrate, actorMetadata.ID, actorMetadata.RemindersMetadata.PartitionCount)
 
 	if actorMetadata.RemindersMetadata.PartitionCount >= 1 {
 		metadata := map[string]string{metadataPartitionKey: actorMetadata.ID}
@@ -837,9 +837,9 @@ func (r *statestore) getRemindersForActorType(ctx context.Context, actorType str
 			list = append(list, batchList...)
 		}
 
-		log.Debugf(
-			"Finished reading reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions: total of %d reminders",
-			actorType, migrate, actorMetadata.ID, actorMetadata.RemindersMetadata.PartitionCount, len(list))
+		//log.Debugf(
+		//	"Finished reading reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions: total of %d reminders",
+		//	actorType, migrate, actorMetadata.ID, actorMetadata.RemindersMetadata.PartitionCount, len(list))
 		return list, actorMetadata, nil
 	}
 
@@ -857,7 +857,7 @@ func (r *statestore) getRemindersForActorType(ctx context.Context, actorType str
 	if resp == nil {
 		resp = &state.GetResponse{}
 	}
-	log.Debugf("Read reminders from %s without partition", key)
+	//log.Debugf("Read reminders from %s without partition", key)
 
 	var reminders []internal.Reminder
 	if len(resp.Data) > 0 {
@@ -880,9 +880,9 @@ func (r *statestore) getRemindersForActorType(ctx context.Context, actorType str
 		0: resp.ETag,
 	}
 
-	log.Debugf(
-		"Finished reading reminders for actor type %s (migrate=%t), with metadata id %s and no partitions: total of %d reminders",
-		actorType, migrate, actorMetadata.ID, len(reminderRefs))
+	//log.Debugf(
+	//	"Finished reading reminders for actor type %s (migrate=%t), with metadata id %s and no partitions: total of %d reminders",
+	//	actorType, migrate, actorMetadata.ID, len(reminderRefs))
 	return reminderRefs, actorMetadata, nil
 }
 

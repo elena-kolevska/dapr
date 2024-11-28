@@ -244,6 +244,7 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 		}
 	}
 
+	fmt.Println("\n\n\n\n\n--------------------------------")
 	log.Infof(
 		"Start disseminating tables for namespace %s. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
 		ns, cnt, nStreamConnPool, nTargetConns, req.GetVersion())
@@ -324,6 +325,9 @@ func (p *Service) disseminateOperationOnHosts(ctx context.Context, req *tablesUp
 }
 
 func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, operation string, tables *v1pb.PlacementTables) error {
+	fmt.Println("---------------------------")
+	fmt.Printf("\n\n\n\ndisseminateOperation %s on target: %#v\n", operation, target)
+
 	o := &v1pb.PlacementOrder{
 		Operation: operation,
 	}
@@ -340,20 +344,41 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 			remoteAddr := "n/a"
 			if p, ok := peer.FromContext(target.stream.Context()); ok {
 				remoteAddr = p.Addr.String()
+				fmt.Println("remoteAddr1: ", remoteAddr)
 			}
 			log.Debugf("Runtime host %q is disconnected from server; go with next dissemination (operation: %s)", remoteAddr, operation)
 			return nil
 		}
 
-		if err := target.stream.Send(o); err != nil {
-			remoteAddr := "n/a"
-			if p, ok := peer.FromContext(target.stream.Context()); ok {
-				remoteAddr = p.Addr.String()
+		fmt.Println("\nstarting to send to target: ", target.hostID)
+
+		sendCtx, sendCancelFn := context.WithTimeout(ctx, 5*time.Second)
+		defer sendCancelFn()
+
+		errCh := make(chan error)
+
+		go func() {
+			errCh <- target.stream.Send(o)
+		}()
+
+		select {
+		case <-sendCtx.Done():
+			return fmt.Errorf("\ntimeout sending to target %s", target.hostID)
+		case err := <-errCh:
+			if err != nil {
+				remoteAddr := "n/a"
+				if p, ok := peer.FromContext(target.stream.Context()); ok {
+					remoteAddr = p.Addr.String()
+					fmt.Println("remoteAddr2: ", remoteAddr)
+				}
+				log.Errorf("Error updating runtime host %q on %q operation: %v", remoteAddr, operation, err)
+				return err
 			}
-			log.Errorf("Error updating runtime host %q on %q operation: %v", remoteAddr, operation, err)
-			return err
+
+			fmt.Println("\nfinished sending to target: ", target.hostID)
+			return nil
 		}
-		return nil
+
 	},
 		backoff,
 		func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },

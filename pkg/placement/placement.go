@@ -358,7 +358,8 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 						APILevel:  req.GetApiLevel(),
 					},
 				}
-				log.Debugf("Member changed; upserting appid %s in namespace %s with entities %v", req.GetId(), namespace, req.GetEntities())
+				//log.Debugf("Member changed; upserting appid %s in namespace %s with entities %v", req.GetId(), namespace, req.GetEntities())
+				log.Debugf("Member changed; upserting appid %s in namespace %s with num entities %v", req.GetId(), namespace, len(req.GetEntities()))
 			}
 
 		default:
@@ -370,7 +371,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
 				log.Debugf("Stream connection is disconnected gracefully: %s", registeredMemberID)
 			} else {
-				log.Debugf("Stream connection is disconnected with the error: %v", err)
+				log.Debugf("Stream connection is disconnected with the error: %v. req = %v", err, req)
 			}
 
 			if requiresUpdateInPlacementTables(req, &isActorHost) {

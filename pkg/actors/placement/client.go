@@ -15,6 +15,8 @@ package placement
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -53,20 +55,34 @@ type placementClient struct {
 // connectToServer initializes a new connection to the target server and if it succeeds replace the current
 // stream with the connected stream.
 func (c *placementClient) connectToServer(ctx context.Context, serverAddr string) error {
-	opts, err := c.getGrpcOpts()
-	if err != nil {
-		return err
-	}
-
-	// If we're trying to connect to the same address, we reuse the existing connection.
-	// This is not just an optimisation, but a necessary feature for the round-robin load balancer
-	// to work correctly when connecting to the placement headless service in k8s
 	var conn *grpc.ClientConn
 	if c.clientConn == nil || c.clientConn.Target() != serverAddr {
 		if c.clientConn != nil {
 			c.clientConn.Close() // Closes previous connection to avoid leaks
 			c.client = nil
 		}
+
+		// Variable to hold the net.Conn
+		var netConn net.Conn
+
+		// Create a custom dialer
+		dialer := func(ctx context.Context, addr string) (net.Conn, error) {
+			d := net.Dialer{}
+			nc, err := d.DialContext(ctx, "tcp", addr)
+			if err != nil {
+				return nil, err
+			}
+			netConn = nc // Capture the net.Conn
+			return nc, nil
+		}
+
+		// Get gRPC options and append the custom dialer
+		opts, err := c.getGrpcOpts()
+		if err != nil {
+			return err
+		}
+		opts = append(opts, grpc.WithContextDialer(dialer))
+
 		conn, err = grpc.DialContext(ctx, serverAddr, opts...) //nolint:staticcheck
 		if err != nil {
 			if conn != nil {
@@ -75,7 +91,12 @@ func (c *placementClient) connectToServer(ctx context.Context, serverAddr string
 			return err
 		}
 
-		// Creating the new connection and client
+		// Print the local address (ephemeral port)
+		if netConn != nil {
+			fmt.Printf("Local address: %s\n", netConn.LocalAddr().String())
+		}
+
+		// Create the new client
 		c.clientConn = conn
 		c.client = v1pb.NewPlacementClient(c.clientConn)
 		ctx = metadata.AppendToOutgoingContext(ctx, placement.GRPCContextKeyAcceptVNodes, "false")
