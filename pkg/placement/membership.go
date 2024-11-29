@@ -154,6 +154,7 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 						log.Errorf("fail to apply command: %v", raftErr)
 					} else {
 						if op.cmdType == raft.MemberRemove {
+							log.Debugf("Removing disconnected member: %s", op.host.Name)
 							updateCount = p.handleDisconnectedMember(op, updateCount)
 						}
 
@@ -190,6 +191,7 @@ func (p *Service) handleDisconnectedMember(op hostMemberChange, updated bool) bo
 	// - remove namespace-specific data structures to prevent memory-leaks
 	// - prevent next dissemination, because there are no more hosts in the namespace
 	if p.raftNode.FSM().State().MemberCountInNamespace(op.host.Namespace) == 0 {
+		log.Debugf("Removing last member (%s) in namespace: %s", op.host.Name, op.host.Namespace)
 		p.disseminateLocks.Delete(op.host.Namespace)
 		p.disseminateNextTime.Del(op.host.Namespace)
 		p.memberUpdateCount.Del(op.host.Namespace)
@@ -244,7 +246,6 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 		}
 	}
 
-	fmt.Println("\n\n\n\n\n--------------------------------")
 	log.Infof(
 		"Start disseminating tables for namespace %s. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
 		ns, cnt, nStreamConnPool, nTargetConns, req.GetVersion())
@@ -325,8 +326,6 @@ func (p *Service) disseminateOperationOnHosts(ctx context.Context, req *tablesUp
 }
 
 func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, operation string, tables *v1pb.PlacementTables) error {
-	fmt.Printf("disseminateOperation %s on target: %#v\n", operation, target)
-
 	o := &v1pb.PlacementOrder{
 		Operation: operation,
 	}
@@ -343,13 +342,10 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 			remoteAddr := "n/a"
 			if p, ok := peer.FromContext(target.stream.Context()); ok {
 				remoteAddr = p.Addr.String()
-				fmt.Println("remoteAddr1: ", remoteAddr)
 			}
 			log.Debugf("Runtime host %q is disconnected from server; go with next dissemination (operation: %s)", remoteAddr, operation)
 			return nil
 		}
-
-		fmt.Println("\nstarting to send to target: ", target.hostID)
 
 		sendCtx, sendCancelFn := context.WithTimeout(ctx, 5*time.Second)
 		defer sendCancelFn()
@@ -371,19 +367,17 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 				target.cancelFn()
 			}
 
-			return fmt.Errorf("\ntimeout sending to target %s", target.hostID)
+			return fmt.Errorf("timeout sending to target %s", target.hostID)
 		case err := <-errCh:
 			if err != nil {
 				remoteAddr := "n/a"
 				if p, ok := peer.FromContext(target.stream.Context()); ok {
 					remoteAddr = p.Addr.String()
-					fmt.Println("remoteAddr2: ", remoteAddr)
 				}
 				log.Errorf("Error updating runtime host %q on %q operation: %v", remoteAddr, operation, err)
 				return err
 			}
 
-			fmt.Println("\nfinished sending to target: ", target.hostID)
 			return nil
 		}
 

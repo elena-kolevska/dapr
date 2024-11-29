@@ -32,6 +32,12 @@ type daprdStream struct {
 	needsVNodes   bool
 	stream        placementv1pb.Placement_ReportDaprStatusServer
 	cancelFn      context.CancelFunc
+	recvCh        chan recvResult
+}
+
+type recvResult struct {
+	host *placementv1pb.Host
+	err  error
 }
 
 func newDaprdStream(host *placementv1pb.Host, stream placementv1pb.Placement_ReportDaprStatusServer, cancel context.CancelFunc) *daprdStream {
@@ -42,6 +48,7 @@ func newDaprdStream(host *placementv1pb.Host, stream placementv1pb.Placement_Rep
 		stream:        stream,
 		needsVNodes:   hostNeedsVNodes(stream),
 		cancelFn:      cancel,
+		recvCh:        make(chan recvResult, 100), // Buffered to handle incoming messages
 	}
 }
 
@@ -99,6 +106,8 @@ func (s *streamConnPool) delete(stream *daprdStream) {
 			delete(s.streams, stream.hostNamespace)
 		}
 	}
+
+	log.Debugf("Deleted stream connection for host %s in namespace %s", stream.hostName, stream.hostNamespace)
 }
 
 func (s *streamConnPool) getStreamCount(namespace string) int {

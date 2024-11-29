@@ -228,6 +228,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 
 			m := os.Getenv("TEST_MAX_DISSEMINATIONS")
 			x, _ := strconv.Atoi(m)
+			x = 100000000
 			//fmt.Println("---------------------------")
 			//fmt.Println("---------------------------")
 			//fmt.Printf("i: %d, max= %d\n", i, x)
