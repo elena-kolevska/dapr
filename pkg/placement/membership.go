@@ -247,8 +247,8 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 	}
 
 	log.Infof(
-		"Start disseminating tables for namespace %s. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-		ns, cnt, nStreamConnPool, nTargetConns, req.GetVersion())
+		"Start disseminating tables for namespace %s. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s, api level: %d",
+		ns, cnt, nStreamConnPool, nTargetConns, req.GetVersion(), req.tables.GetApiLevel())
 
 	if err := p.performTablesUpdate(ctx, req); err != nil {
 		return err
@@ -362,7 +362,7 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 			// This can happen in some environments when the sidecar is not properly shutdown, or
 			// the sidecar is unresponsive, so the stream buffer fills up
 			// In this case, we should not wait for the stream to respond, but instead return an error
-			// and close the stream
+			// and cancel the stream context
 			if target.cancelFn != nil {
 				target.cancelFn()
 			}

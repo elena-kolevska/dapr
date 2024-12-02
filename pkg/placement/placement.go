@@ -261,73 +261,84 @@ func (p *Service) Start(ctx context.Context) error {
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts.
 func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStatusServer) error { //nolint:nosnakecase
-	hostName := ""
-	isActorHost := false // Does the daprd sidecar host any actor types
 
-	clientID, err := p.validateClient(stream)
+	var isActorHost atomic.Bool // Does the daprd sidecar host any actor types
+
+	spiffeClientID, err := p.validateClient(stream)
 	if err != nil {
 		return err
 	}
 
 	firstMessage, err := stream.Recv()
 	if err != nil {
+		log.Errorf("Failed to receive the first message: %v", err)
 		return status.Errorf(codes.Internal, "failed to receive the first message: %v", err)
 	}
 
-	err = p.validateFirstMessage(firstMessage, clientID)
+	err = p.validateFirstMessage(firstMessage, spiffeClientID)
 	if err != nil {
+		log.Errorf("First message validation failed: %v", err)
 		return err
 	}
 
-	// Older versions won't be sending the namespace in subsequent messages either,
-	// so we'll save this one in a separate variable
-	namespace := firstMessage.GetNamespace()
-
 	// Get the context from the stream
 	ctx, cancel := context.WithCancel(stream.Context())
-	defer cancel()
 
 	daprStream := newDaprdStream(firstMessage, stream, cancel)
 	p.streamConnGroup.Add(1)
 	p.streamConnPool.add(daprStream)
 
+	var wg sync.WaitGroup
+
 	// Clean up when a stream is disconnected or when the placement service loses leadership
 	defer func() {
+		cancel()
+		wg.Wait()
 		p.streamConnGroup.Done()
 		p.streamConnPool.delete(daprStream)
 	}()
 
+	err = p.handleNewConnection(firstMessage, daprStream)
+	if err != nil {
+		log.Errorf("Handling new connection failed for host %s: %v", firstMessage.GetName(), err)
+		return err
+	}
+
+	appID := firstMessage.GetId()
+	// Older versions won't be sending the namespace in subsequent messages either,
+	// so we'll save this one in a separate variable
+	namespace := firstMessage.GetNamespace()
+	hostName := firstMessage.GetName()
+
 	// Read messages off the stream and send them to the recvCh
+	wg.Add(1)
 	go func() {
+		defer func() {
+			close(daprStream.recvCh)
+			wg.Done()
+		}()
+
 		// Send the first message we read above
-		daprStream.recvCh <- recvResult{host: firstMessage, err: nil}
+		select {
+		case daprStream.recvCh <- recvResult{host: firstMessage, err: nil}:
+			log.Debugf("received first message from %s: Id: %s, Name: %s, Namespace: %s, Actors: %s", hostName, firstMessage.Id, firstMessage.Name, firstMessage.Namespace, firstMessage.Entities)
+		case <-ctx.Done():
+			log.Debugf("stream connection is disconnected gracefully: %s", hostName)
+			return
+		}
 
 		// Start reading messages from the stream
 		for {
 			req, err := stream.Recv()
 
-			if err != nil {
-				if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
-					log.Debugf("Stream connection is disconnected gracefully: %s", hostName)
-				} else {
-					log.Debugf("Stream connection is disconnected with the error: %v. req = %v", err, hostName)
+			select {
+			case daprStream.recvCh <- recvResult{host: req, err: err}:
+				if err != nil {
+					return
 				}
-
-				// If the stream is disconnected, we need to remove the member from the placement tables
-				if isActorHost {
-					select {
-					case p.membershipCh <- hostMemberChange{
-						cmdType: raft.MemberRemove,
-						host:    raft.DaprHostMember{Name: hostName, Namespace: namespace},
-					}:
-					case <-p.closedCh:
-					}
-				}
-				close(daprStream.recvCh)
+			case <-ctx.Done():
 				return
 			}
-
-			daprStream.recvCh <- recvResult{host: req, err: err}
 
 		}
 	}()
@@ -338,12 +349,12 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			err := ctx.Err()
 
 			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
-				log.Debugf("Stream connection for app %s(%s) is disconnected gracefully: %s", hostName)
+				log.Infof("Stream connection for app %s is disconnected gracefully: %s", hostName, err)
 			} else {
-				log.Debugf("Stream connection for app %s(%s) is disconnected with the error: %v. req = %v", err, hostName)
+				log.Infof("Stream connection for app %s is disconnected with the error: %v.", hostName, err)
 			}
 
-			if isActorHost {
+			if isActorHost.Load() {
 				select {
 				case p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberRemove,
@@ -358,21 +369,31 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			return errors.New("placement service is closed")
 		case res, ok := <-daprStream.recvCh:
 			if !ok {
-				// recvCh has been closed because we've received an error from the stream
+				// recvCh has been closed
 				return nil
 			}
 
-			host := res.host
-			if clientID != nil && host.GetId() != clientID.AppID() {
-				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", host.GetId())
+			if res.err != nil {
+				if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
+					log.Debugf("Stream connection is disconnected gracefully: %s", hostName)
+				}
+
+				log.Debugf("Stream connection is disconnected with the error: %v. req = %v", err, hostName)
+
+				// If the stream is disconnected, we need to remove the member from the placement tables
+				if isActorHost.Load() {
+					select {
+					case p.membershipCh <- hostMemberChange{
+						cmdType: raft.MemberRemove,
+						host:    raft.DaprHostMember{Name: hostName, Namespace: namespace},
+					}:
+					case <-p.closedCh:
+					}
+				}
+				return res.err
 			}
 
-			if hostName == "" {
-				hostName, err = p.handleNewConnection(host, daprStream, namespace)
-				if err != nil {
-					return err
-				}
-			}
+			host := res.host
 
 			if !requiresUpdateInPlacementTables(host, &isActorHost) {
 				continue
@@ -395,14 +416,14 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 					cmdType: raft.MemberUpsert,
 					host: raft.DaprHostMember{
 						Name:      host.GetName(),
-						AppID:     host.GetId(),
+						AppID:     appID,
 						Namespace: namespace,
 						Entities:  host.GetEntities(),
 						UpdatedAt: now.UnixNano(),
 						APILevel:  host.GetApiLevel(),
 					},
 				}
-				log.Debugf("Member changed; upserting appid %s in namespace %s with entities %v", host.GetId(), namespace, host.GetEntities())
+				log.Debugf("Member changed; upserting appid %s in namespace %s with entities %v", appID, namespace, host.GetEntities())
 				//log.Debugf("Member changed; upserting appid %s in namespace %s with num entities %v", host.GetId(), namespace, len(host.GetEntities()))
 			}
 		}
@@ -445,35 +466,38 @@ func (p *Service) validateFirstMessage(firstMessage *placementv1pb.Host, clientI
 		return status.Errorf(codes.PermissionDenied, "provided client namespace %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetNamespace(), clientID.Namespace())
 	}
 
+	if clientID != nil && firstMessage.GetId() != clientID.AppID() {
+		log.Errorf("Client ID mismatch: %s != %s", firstMessage.GetId(), clientID.AppID())
+		return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", firstMessage.GetId())
+	}
+
 	return nil
 }
 
-func (p *Service) handleNewConnection(req *placementv1pb.Host, daprStream *daprdStream, namespace string) (string, error) {
+func (p *Service) handleNewConnection(req *placementv1pb.Host, daprStream *daprdStream) error {
 	err := p.checkAPILevel(req)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	hostName := req.GetName()
-
 	// If the member is not an actor runtime (len(req.GetEntities()) == 0) we disseminate the tables
-	// If it is, we'll disseminate in the next disseminate interval
+	// If it is, we need to update the state first, and then we'll disseminate in the next disseminate interval
 	if len(req.GetEntities()) == 0 {
 		updateReq := &tablesUpdateRequest{
 			hosts: []daprdStream{*daprStream},
 		}
 		if daprStream.needsVNodes {
-			updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false, namespace)
+			updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false, req.GetNamespace())
 		} else {
-			updateReq.tables = p.raftNode.FSM().PlacementState(true, namespace)
+			updateReq.tables = p.raftNode.FSM().PlacementState(true, req.GetNamespace())
 		}
 		err = p.performTablesUpdate(context.Background(), updateReq)
 		if err != nil {
-			return hostName, err
+			return err
 		}
 	}
 
-	return hostName, nil
+	return nil
 }
 
 func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
@@ -491,7 +515,7 @@ func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
 	return nil
 }
 
-func requiresUpdateInPlacementTables(req *placementv1pb.Host, isActorHost *bool) bool {
+func requiresUpdateInPlacementTables(req *placementv1pb.Host, isActorHost *atomic.Bool) bool {
 	// If the member is reporting no entities it's either a
 	// - non-actor runtime or
 	// - a host that used to have actors (isActorHost=true) but has now unregistered all its actors (common for workflows actors)
@@ -499,8 +523,8 @@ func requiresUpdateInPlacementTables(req *placementv1pb.Host, isActorHost *bool)
 	// In the latter case, we do need to update the placement tables, because we're removing a member that was previously registered
 
 	reportsActors := len(req.GetEntities()) > 0
-	existsInPlacementTables := *isActorHost // if the member had previously reported actors
-	*isActorHost = reportsActors
+	existsInPlacementTables := isActorHost.Load() // if the member had previously reported actors
+	isActorHost.Store(reportsActors)
 
 	return reportsActors || existsInPlacementTables
 }
