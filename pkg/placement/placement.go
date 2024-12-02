@@ -262,6 +262,10 @@ func (p *Service) Start(ctx context.Context) error {
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts.
 func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStatusServer) error { //nolint:nosnakecase
 
+	if !p.hasLeadership.Load() {
+		return status.Errorf(codes.FailedPrecondition, "node id=%s is not a leader. Only the leader can serve requests", p.raftNode.GetID())
+	}
+
 	var isActorHost atomic.Bool // Does the daprd sidecar host any actor types
 
 	spiffeClientID, err := p.validateClient(stream)
@@ -319,16 +323,18 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		}()
 
 		// Send the first message we read above
-		select {
-		case daprStream.recvCh <- recvResult{host: firstMessage, err: nil}:
-			log.Debugf("received first message from %s: Id: %s, Name: %s, Namespace: %s, Actors: %s", hostName, firstMessage.Id, firstMessage.Name, firstMessage.Namespace, firstMessage.Entities)
-		case <-ctx.Done():
-			log.Debugf("stream connection is disconnected gracefully: %s", hostName)
-			return
+		if p.hasLeadership.Load() {
+			select {
+			case daprStream.recvCh <- recvResult{host: firstMessage, err: nil}:
+				log.Debugf("received first message from %s: Id: %s, Name: %s, Namespace: %s, Actors: %s", hostName, firstMessage.Id, firstMessage.Name, firstMessage.Namespace, firstMessage.Entities)
+			case <-ctx.Done():
+				log.Debugf("stream connection is disconnected gracefully: %s", hostName)
+				return
+			}
 		}
 
 		// Start reading messages from the stream
-		for {
+		for p.hasLeadership.Load() {
 			req, err := stream.Recv()
 
 			select {
@@ -376,9 +382,9 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			if res.err != nil {
 				if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
 					log.Debugf("Stream connection is disconnected gracefully: %s", hostName)
+				} else {
+					log.Debugf("Stream connection is disconnected with the error: %v. req = %v", err, hostName)
 				}
-
-				log.Debugf("Stream connection is disconnected with the error: %v. req = %v", err, hostName)
 
 				// If the stream is disconnected, we need to remove the member from the placement tables
 				if isActorHost.Load() {
