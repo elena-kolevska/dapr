@@ -261,7 +261,6 @@ func (p *Service) Start(ctx context.Context) error {
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts.
 func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStatusServer) error { //nolint:nosnakecase
-
 	if !p.hasLeadership.Load() {
 		return status.Errorf(codes.FailedPrecondition, "node id=%s is not a leader. Only the leader can serve requests", p.raftNode.GetID())
 	}
@@ -326,7 +325,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		if p.hasLeadership.Load() {
 			select {
 			case daprStream.recvCh <- recvResult{host: firstMessage, err: nil}:
-				log.Debugf("received first message from %s: Id: %s, Name: %s, Namespace: %s, Actors: %s", hostName, firstMessage.Id, firstMessage.Name, firstMessage.Namespace, firstMessage.Entities)
+				log.Debugf("received first message from %s: Id: %s, Name: %s, Namespace: %s, Actors: %s", hostName, appID, hostName, namespace, firstMessage.GetEntities())
 			case <-ctx.Done():
 				log.Debugf("stream connection is disconnected gracefully: %s", hostName)
 				return
@@ -335,24 +334,23 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 		// Start reading messages from the stream
 		for p.hasLeadership.Load() {
-			req, err := stream.Recv()
+			req, recvErr := stream.Recv()
 
 			select {
-			case daprStream.recvCh <- recvResult{host: req, err: err}:
-				if err != nil {
+			case daprStream.recvCh <- recvResult{host: req, err: recvErr}:
+				if recvErr != nil {
 					return
 				}
 			case <-ctx.Done():
 				return
 			}
-
 		}
 	}()
 
 	for p.hasLeadership.Load() {
 		select {
 		case <-ctx.Done():
-			err := ctx.Err()
+			err = ctx.Err()
 
 			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
 				log.Infof("Stream connection for app %s is disconnected gracefully: %s", hostName, err)
@@ -430,7 +428,6 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 					},
 				}
 				log.Debugf("Member changed; upserting appid %s in namespace %s with entities %v", appID, namespace, host.GetEntities())
-				//log.Debugf("Member changed; upserting appid %s in namespace %s with num entities %v", host.GetId(), namespace, len(host.GetEntities()))
 			}
 		}
 	}
