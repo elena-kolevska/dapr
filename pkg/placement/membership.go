@@ -268,7 +268,7 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 // It first locks so no further dapr can be taken it. Once placement table is locked
 // in runtime, it proceeds to update new table to Dapr runtimes and then unlock
 // once all runtimes have been updated.
-func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequest) error {
+func (p *Service) performTablesUpdate(parentCtx context.Context, req *tablesUpdateRequest) error {
 	// TODO: error from disseminationOperation needs to be handled properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
 	startedAt := p.clock.Now()
@@ -278,7 +278,7 @@ func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequ
 		req.SetAPILevel(p.minAPILevel, p.maxAPILevel)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(parentCtx, 15*time.Second)
 	defer cancel()
 
 	// Perform each update on all hosts in sequence

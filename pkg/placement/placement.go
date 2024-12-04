@@ -307,11 +307,11 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		return err
 	}
 
-	appID := firstMessage.GetId()
 	// Older versions won't be sending the namespace in subsequent messages either,
 	// so we'll save this one in a separate variable
 	namespace := firstMessage.GetNamespace()
 	hostName := firstMessage.GetName()
+	appID := firstMessage.GetId()
 
 	// Read messages off the stream and send them to the recvCh
 	wg.Add(1)
@@ -350,24 +350,8 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	for p.hasLeadership.Load() {
 		select {
 		case <-ctx.Done():
-			err = ctx.Err()
-
-			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
-				log.Infof("Stream connection for app %s is disconnected gracefully: %s", hostName, err)
-			} else {
-				log.Infof("Stream connection for app %s is disconnected with the error: %v.", hostName, err)
-			}
-
-			if isActorHost.Load() {
-				select {
-				case p.membershipCh <- hostMemberChange{
-					cmdType: raft.MemberRemove,
-					host:    raft.DaprHostMember{Name: hostName, Namespace: namespace},
-				}:
-				case <-p.closedCh:
-					return errors.New("placement service is closed")
-				}
-			}
+			_ = p.handleErrorOnStream(ctx.Err(), hostName, &isActorHost, namespace)
+			// We ignore the possible error here because the stream is already closed
 			return nil
 		case <-p.closedCh:
 			return errors.New("placement service is closed")
@@ -378,23 +362,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			}
 
 			if res.err != nil {
-				if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
-					log.Debugf("Stream connection is disconnected gracefully: %s", hostName)
-				} else {
-					log.Debugf("Stream connection is disconnected with the error: %v. req = %v", err, hostName)
-				}
-
-				// If the stream is disconnected, we need to remove the member from the placement tables
-				if isActorHost.Load() {
-					select {
-					case p.membershipCh <- hostMemberChange{
-						cmdType: raft.MemberRemove,
-						host:    raft.DaprHostMember{Name: hostName, Namespace: namespace},
-					}:
-					case <-p.closedCh:
-					}
-				}
-				return res.err
+				return p.handleErrorOnStream(res.err, hostName, &isActorHost, namespace)
 			}
 
 			host := res.host
@@ -515,6 +483,26 @@ func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
 		return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.GetApiLevel())
 	}
 
+	return nil
+}
+
+func (p *Service) handleErrorOnStream(err error, hostName string, isActorHost *atomic.Bool, namespace string) error {
+	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
+		log.Infof("Stream connection for app %s is disconnected gracefully: %s", hostName, err)
+	} else {
+		log.Infof("Stream connection for app %s is disconnected with the error: %v.", hostName, err)
+	}
+
+	if isActorHost.Load() {
+		select {
+		case p.membershipCh <- hostMemberChange{
+			cmdType: raft.MemberRemove,
+			host:    raft.DaprHostMember{Name: hostName, Namespace: namespace},
+		}:
+		case <-p.closedCh:
+			return errors.New("placement service is closed")
+		}
+	}
 	return nil
 }
 
