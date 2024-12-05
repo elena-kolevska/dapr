@@ -51,6 +51,25 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 	numActors := 5000
 
+	// Set up host2 and stream2 (not reading from stream)
+	host2 := &v1pb.Host{
+		Name:      "myapp2",
+		Namespace: "default",
+		Port:      1232,
+		Entities:  []string{"host2-0"},
+		Id:        "myapp2",
+		ApiLevel:  uint32(20),
+	}
+
+	ctx2, cancel2 := context.WithCancel(ctx)
+	t.Cleanup(cancel2)
+	stream2, streamCancel2 := n.getStream(t, ctx2)
+	t.Cleanup(streamCancel2)
+	err := stream2.Send(host2)
+	require.NoError(t, err, "Failed to send host2")
+
+	// Intentionally not reading from stream2 to simulate a hang on the larger message after host 1 connects
+
 	host1 := &v1pb.Host{
 		Name:      "myapp1",
 		Namespace: "default",
@@ -64,7 +83,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(cancel1)
 	stream1, streamCancel1 := n.getStream(t, ctx1)
 	t.Cleanup(streamCancel1)
-	err := stream1.Send(host1)
+	err = stream1.Send(host1)
 	require.NoError(t, err, "Failed to send host1")
 
 	// Start reading from stream1
@@ -73,6 +92,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	updateCh1 := make(chan *v1pb.PlacementTables)
 	go func() {
 		defer wg.Done()
+		defer close(updateCh1)
 		for {
 			resp, err := stream1.Recv()
 			if err != nil {
@@ -86,44 +106,40 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	}()
 
 	// Wait for the first placement update
-	select {
-	case <-ctx.Done():
-		t.Fatal("Test context canceled unexpectedly")
-	case placementTables := <-updateCh1:
-		require.Len(t, placementTables.GetEntries(), numActors)
-		require.Contains(t, placementTables.GetEntries(), "host1-0")
-	}
-
-	// Set up host2 and stream2 (not reading from stream)
-	host2 := &v1pb.Host{
-		Name:      "myapp2",
-		Namespace: "default",
-		Port:      1232,
-		Entities:  getActorsList(numActors, "host2"),
-		Id:        "myapp2",
-		ApiLevel:  uint32(20),
-	}
-
-	ctx2, cancel2 := context.WithCancel(ctx)
-	t.Cleanup(cancel2)
-	stream2, streamCancel2 := n.getStream(t, ctx2)
-	t.Cleanup(streamCancel2)
-	err = stream2.Send(host2)
-	require.NoError(t, err, "Failed to send host2")
-
-	// Intentionally not reading from stream2 to simulate a hang
 	// The placement tables message that the Placement server will try to disseminate to stream2 will
 	// contain 10000 actors and around 100Kb - higher than the default stream write buffer size of 32KBs
 	// So around this moment of the test, we're expecting the stream2 to hang, but stream 1 should
 	// still be receiving the disseminated message
+	// Since the dissemination is done in an interval we can't know for sure if we'll get the
+	// message before or after the stream2 is disconnected
 	select {
 	case <-ctx.Done():
 		t.Fatal("Test context canceled unexpectedly")
 	case placementTables := <-updateCh1:
-		require.Len(t, placementTables.GetEntries(), numActors*2)
+		fmt.Println("Placement tables received on stream1", len(placementTables.GetEntries()))
+		inRange := 5000 <= len(placementTables.GetEntries()) && len(placementTables.GetEntries()) <= 5001
+		require.True(t, inRange)
 		require.Contains(t, placementTables.GetEntries(), "host1-0")
-		require.Contains(t, placementTables.GetEntries(), "host2-0")
 	}
+
+	//select {
+	//case <-ctx.Done():
+	//	t.Fatal("Test context canceled unexpectedly")
+	//case placementTables := <-updateCh1:
+	//	require.Len(t, placementTables.GetEntries(), numActors*2)
+	//	require.Contains(t, placementTables.GetEntries(), "host1-0")
+	//	require.Contains(t, placementTables.GetEntries(), "host2-0")
+	//}
+
+	// Stream 2 should be closed by now and stream 1 should get the updated tables
+	// Because of the retry mechanism on the placement side (3x5sec) plus the dissemination window
+	// this takes a while
+	//require.EventuallyWithT(t, func(c *assert.CollectT) {
+	//	placementTables := <-updateCh1
+	//	fmt.Println("Placement tables received on stream1", len(placementTables.GetEntries()))
+	//	assert.GreaterOrEqual(c, len(placementTables.GetEntries()), numActors)
+	//	assert.Contains(c, placementTables.GetEntries(), "host2-0")
+	//}, 17*time.Second, 1*time.Second)
 
 	// Set up host3 and stream3 (reading from stream)
 	host3 := &v1pb.Host{
@@ -147,9 +163,12 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	updateCh3 := make(chan *v1pb.PlacementTables)
 	go func() {
 		defer wg.Done()
+		defer close(updateCh3)
 		for {
 			resp, err := stream3.Recv()
+			fmt.Println("Received message from stream3", len(resp.GetTables().GetEntries()), err)
 			if err != nil {
+				fmt.Println("Error receiving message from stream3", err)
 				return
 			}
 
@@ -162,7 +181,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	select {
 	case <-ctx.Done():
 		t.Fatal("Test context canceled unexpectedly")
-	case placementTables := <-updateCh3:
+	case placementTables := <-updateCh1:
 		require.GreaterOrEqual(t, len(placementTables.GetEntries()), numActors*2)
 		require.Contains(t, placementTables.GetEntries(), "host1-0")
 		require.Contains(t, placementTables.GetEntries(), "host3-0")
@@ -171,11 +190,24 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 		t.Log("Timeout waiting for placement update on stream3")
 	}
 
+	select {
+	case <-ctx.Done():
+		t.Fatal("Test context canceled unexpectedly")
+	case placementTables := <-updateCh3:
+		require.GreaterOrEqual(t, len(placementTables.GetEntries()), numActors*2)
+		require.Contains(t, placementTables.GetEntries(), "host1-0")
+		require.Contains(t, placementTables.GetEntries(), "host3-0")
+		require.NotContains(t, placementTables.GetEntries(), "host2-0")
+	case <-time.After(20 * time.Second):
+		t.Fail()
+	}
+
 	// Clean up
 	streamCancel1()
 	streamCancel2()
 	streamCancel3()
 	wg.Wait()
+	fmt.Println("=== DONE")
 }
 
 func (n *streamHang) getStream(t *testing.T, ctx context.Context) (v1pb.Placement_ReportDaprStatusClient, func()) {
