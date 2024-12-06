@@ -73,6 +73,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		initialCluster:      uid.String() + "=127.0.0.1:" + strconv.Itoa(port),
 		initialClusterPorts: []int{port},
 		metadataEnabled:     false,
+		disseminateTimeout:  "500ms",
 	}
 
 	for _, fopt := range fopts {
@@ -91,6 +92,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		"--initial-cluster=" + opts.initialCluster,
 		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
 		"--metadata-enabled=" + strconv.FormatBool(opts.metadataEnabled),
+		"--disseminate-timeout=" + opts.disseminateTimeout,
 	}
 	if opts.maxAPILevel != nil {
 		args = append(args, "--max-api-level="+strconv.Itoa(*opts.maxAPILevel))
