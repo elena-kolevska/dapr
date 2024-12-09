@@ -18,6 +18,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -47,10 +48,16 @@ func NewActorError(res *internalv1pb.InternalInvokeResponse) error {
 	}
 
 	msg := res.GetMessage()
+	body := []byte{}
+	var contentType string
+	if msg != nil {
+		body = msg.GetData().GetValue()
+		contentType = msg.GetContentType()
+	}
 	return &ActorError{
-		body:        msg.GetData().GetValue(),
+		body:        body,
 		headers:     res.GetHeaders(),
-		contentType: msg.GetContentType(),
+		contentType: contentType,
 		statusCode:  statusCode,
 		message:     "actor error with details in body",
 	}
