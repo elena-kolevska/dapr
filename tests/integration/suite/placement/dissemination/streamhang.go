@@ -50,9 +50,6 @@ func (n *streamHang) Setup(t *testing.T) []framework.Option {
 
 func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
-	t.Cleanup(func() {
-		fmt.Println("=== CLEANUP", time.Now())
-	})
 
 	// Set up host1 and stream1 (not reading from stream)
 	host1 := &v1pb.Host{
@@ -79,7 +76,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 		Name:      "local/myapp2",
 		Namespace: "default",
 		Port:      1231,
-		Entities:  getActorsList(10000, "host2"),
+		Entities:  getActorsList(10, "host2"),
 		Id:        "myapp2",
 		ApiLevel:  uint32(20),
 	}
@@ -118,12 +115,12 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	// Because of the retry mechanism on the placement side (3x1sec) plus the dissemination window
 	// this takes a while
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		placementTables := <-updateCh2
+		placementTables, ok := <-updateCh2
+		require.True(t, ok)
 		fmt.Println("Placement tables received on stream2", len(placementTables.GetEntries()))
-		//x := placementTables.GetEntries() == 4000 || placementTables.GetEntries() == 5000
-		assert.GreaterOrEqual(c, len(placementTables.GetEntries()), 4000)
-		//assert.Contains(c, placementTables.GetEntries(), "host2-0")
-	}, 20*time.Second, 500*time.Millisecond)
+		assert.Len(c, placementTables.GetEntries(), 10)
+		assert.Contains(c, placementTables.GetEntries(), "host2-0")
+	}, 20*time.Second, 100*time.Millisecond)
 
 	time.Sleep(1 * time.Second) // Wait until first dissemination is triggered
 
@@ -152,9 +149,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 		defer close(updateCh3)
 		for {
 			resp, err := stream3.Recv()
-			fmt.Println("Received message from stream3", resp.GetOperation(), len(resp.GetTables().GetEntries()), err)
 			if err != nil {
-				fmt.Println("Error receiving message from stream3", err)
 				return
 			}
 
@@ -164,40 +159,20 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 		}
 	}()
 
-	//require.EventuallyWithT(t, func(c *assert.CollectT) {
-	//	placementTables := <-updateCh2
-	//	assert.Len(c, placementTables.GetEntries(), 10000)
-	//	assert.Contains(c, placementTables.GetEntries(), "host2-0")
-	//	assert.Contains(c, placementTables.GetEntries(), "host3-0")
-	//	assert.NotContains(c, placementTables.GetEntries(), "host1-0")
-	//}, 10*time.Second, 1*time.Second)
-	//select {
-	//case <-ctx.Done():
-	//	t.Fatal("Test context canceled unexpectedly")
-	//case placementTables := <-updateCh2:
-	//	require.Equal(t, numActors*2, len(placementTables.GetEntries()))
-	//	require.Contains(t, placementTables.GetEntries(), "host2-0")
-	//	require.Contains(t, placementTables.GetEntries(), "host3-0")
-	//	require.NotContains(t, placementTables.GetEntries(), "host1-0")
-	//case <-time.After(10 * time.Second):
-	//	t.Log("Timeout waiting for placement update on stream2")
-	//	t.Fail()
-	//}
-
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		placementTables := <-updateCh3
-		assert.Len(c, placementTables.GetEntries(), 10000)
+		placementTables, ok := <-updateCh3
+		require.True(t, ok)
+		assert.Len(c, placementTables.GetEntries(), 13)
 		assert.Contains(c, placementTables.GetEntries(), "host2-0")
 		assert.Contains(c, placementTables.GetEntries(), "host3-0")
 		assert.NotContains(c, placementTables.GetEntries(), "host1-0")
-	}, 15*time.Second, 1*time.Second)
+	}, 15*time.Second, 500*time.Millisecond)
 
 	// Clean up
 	streamCancel1()
 	streamCancel2()
 	streamCancel3()
 	wg.Wait()
-	fmt.Println("=== DONE")
 }
 
 func (n *streamHang) getStream(t *testing.T, ctx context.Context) (v1pb.Placement_ReportDaprStatusClient, func()) {

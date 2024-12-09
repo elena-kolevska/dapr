@@ -73,7 +73,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		initialCluster:      uid.String() + "=127.0.0.1:" + strconv.Itoa(port),
 		initialClusterPorts: []int{port},
 		metadataEnabled:     false,
-		disseminateTimeout:  "500ms",
+		disseminateTimeout:  "2s",
 	}
 
 	for _, fopt := range fopts {

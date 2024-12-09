@@ -284,19 +284,17 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		return err
 	}
 
-	// Get the context from the stream
-	ctx, cancel := context.WithCancel(stream.Context())
+	// Attach a new context to the stream, so that we can cancel it if there's a problem
+	// during dissemination (outside of this go routine)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	daprStream := newDaprdStream(firstMessage, stream, cancel)
 	p.streamConnGroup.Add(1)
 	p.streamConnPool.add(daprStream)
 
-	var wg sync.WaitGroup
-
 	// Clean up when a stream is disconnected or when the placement service loses leadership
 	defer func() {
-		cancel()
-		wg.Wait()
 		p.streamConnGroup.Done()
 		p.streamConnPool.delete(daprStream)
 	}()
@@ -314,11 +312,9 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	appID := firstMessage.GetId()
 
 	// Read messages off the stream and send them to the recvCh
-	wg.Add(1)
 	go func() {
 		defer func() {
 			close(daprStream.recvCh)
-			wg.Done()
 		}()
 
 		// Send the first message we read above
@@ -334,15 +330,15 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 		// Start reading messages from the stream
 		for p.hasLeadership.Load() {
-			req, recvErr := stream.Recv()
-
 			select {
-			case daprStream.recvCh <- recvResult{host: req, err: recvErr}:
+			case <-ctx.Done():
+				return
+			default:
+				req, recvErr := stream.Recv()
+				daprStream.recvCh <- recvResult{host: req, err: recvErr}
 				if recvErr != nil {
 					return
 				}
-			case <-ctx.Done():
-				return
 			}
 		}
 	}()
@@ -350,22 +346,15 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	for p.hasLeadership.Load() {
 		select {
 		case <-ctx.Done():
-			_ = p.handleErrorOnStream(ctx.Err(), hostName, &isActorHost, namespace)
-			// We ignore the possible error here because the stream is already closed
-			return nil
+			return p.handleErrorOnStream(ctx.Err(), hostName, &isActorHost, namespace)
 		case <-p.closedCh:
 			return errors.New("placement service is closed")
-		case res, ok := <-daprStream.recvCh:
-			if !ok {
-				// recvCh has been closed
-				return nil
+		case in := <-daprStream.recvCh:
+			if in.err != nil {
+				return p.handleErrorOnStream(in.err, hostName, &isActorHost, namespace)
 			}
 
-			if res.err != nil {
-				return p.handleErrorOnStream(res.err, hostName, &isActorHost, namespace)
-			}
-
-			host := res.host
+			host := in.host
 
 			if !requiresUpdateInPlacementTables(host, &isActorHost) {
 				continue
@@ -374,7 +363,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			now := p.clock.Now()
 
 			for _, entity := range host.GetEntities() {
-				monitoring.RecordActorHeartbeat(host.GetId(), entity, host.GetName(), res.host.GetNamespace(), host.GetPod(), now)
+				monitoring.RecordActorHeartbeat(host.GetId(), entity, host.GetName(), host.GetNamespace(), host.GetPod(), now)
 			}
 
 			// Record the heartbeat timestamp. Used for metrics and for disconnecting faulty hosts
