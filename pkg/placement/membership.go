@@ -336,7 +336,7 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 	config := retry.DefaultConfig()
 	config.MaxRetries = 3
 	backoff := config.NewBackOffWithContext(ctx)
-	return retry.NotifyRecover(func() error {
+	err := retry.NotifyRecover(func() error {
 		// Check stream in stream pool, if stream is not available, skip to next.
 		if _, ok := p.streamConnPool.getStream(target.stream); !ok {
 			remoteAddr := "n/a"
@@ -347,7 +347,7 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 			return nil
 		}
 
-		sendCtx, sendCancelFn := context.WithTimeout(ctx, 5*time.Second)
+		sendCtx, sendCancelFn := context.WithTimeout(ctx, 1*time.Second) // We should make this configurable
 		defer sendCancelFn()
 
 		errCh := make(chan error)
@@ -363,10 +363,8 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 			// the sidecar is unresponsive, so the stream buffer fills up
 			// In this case, we should not wait for the stream to respond, but instead return an error
 			// and cancel the stream context
-			if target.cancelFn != nil {
-				target.cancelFn()
-			}
 
+			log.Errorf("timeout sending to target %s", target.hostID)
 			return fmt.Errorf("timeout sending to target %s", target.hostID)
 		case err := <-errCh:
 			if err != nil {
@@ -385,4 +383,12 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 		func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },
 		func() { log.Debug("Dissemination successful after failure") },
 	)
+
+	if err != nil {
+		if target.cancelFn != nil {
+			target.cancelFn()
+		}
+	}
+
+	return err
 }
