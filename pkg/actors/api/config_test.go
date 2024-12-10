@@ -54,7 +54,7 @@ func TestTranslateEntityConfig_Defaults(t *testing.T) {
 
 	assert.Len(t, domainConfig.Entities, 2)
 	assert.Equal(t, DefaultIdleTimeout, domainConfig.ActorIdleTimeout)
-	assert.Equal(t, DefaultOngoingCallTimeout, domainConfig.DrainOngoingCallTimeout)
+	assert.Equal(t, defaultOngoingCallTimeout, domainConfig.DrainOngoingCallTimeout)
 	assert.False(t, domainConfig.DrainRebalancedActors)
 	assert.Equal(t, 0, domainConfig.RemindersStoragePartitions)
 	assert.NotNil(t, domainConfig.ReentrancyConfig)
@@ -78,7 +78,7 @@ func TestTranslateEntityConfig_InvalidDurations(t *testing.T) {
 
 	// Then: Defaults are applied for invalid durations
 	assert.Equal(t, DefaultIdleTimeout, domainConfig.ActorIdleTimeout)
-	assert.Equal(t, DefaultOngoingCallTimeout, domainConfig.DrainOngoingCallTimeout)
+	assert.Equal(t, defaultOngoingCallTimeout, domainConfig.DrainOngoingCallTimeout)
 	assert.True(t, domainConfig.DrainRebalancedActors)
 	assert.Equal(t, 3, domainConfig.RemindersStoragePartitions)
 }
