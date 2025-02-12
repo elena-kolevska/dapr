@@ -275,38 +275,47 @@ func TestPauseWorkflowApi(t *testing.T) {
 		workflowComponent string
 		instanceID        string
 		expectedError     error
+		status            string
 	}{
 		{
 			testName:          "No instance ID provided in pause request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
 			expectedError:     messages.ErrMissingOrEmptyInstance,
+			status:            "SUSPENDED",
 		},
 		{
 			testName:          "All is well in pause request",
 			workflowComponent: fakeComponentName,
 			instanceID:        fakeInstanceID,
+			expectedError:     messages.ErrPauseWorkflow,
+			status:            "FOO",
 		},
-	}
-
-	// Setup universal dapr API
-	fakeAPI := &Universal{
-		logger:     logger.NewLogger("test"),
-		resiliency: resiliency.New(nil),
-		workflowEngine: fake.New().WithClient(func() workflows.Workflow {
-			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
-				return &workflows.StateResponse{
-					Workflow: &workflows.WorkflowState{
-						RuntimeStatus: "SUSPENDED",
-					},
-				}, nil
-			})
-		}),
-		actors: actorsfake.New(),
+		{
+			testName:          "All is well in pause request",
+			workflowComponent: fakeComponentName,
+			instanceID:        fakeInstanceID,
+			status:            "SUSPENDED",
+		},
 	}
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
+			fakeAPI := &Universal{
+				logger:     logger.NewLogger("test"),
+				resiliency: resiliency.New(nil),
+				workflowEngine: fake.New().WithClient(func() workflows.Workflow {
+					return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+						return &workflows.StateResponse{
+							Workflow: &workflows.WorkflowState{
+								RuntimeStatus: tt.status,
+							},
+						}, nil
+					})
+				}),
+				actors: actorsfake.New(),
+			}
+
 			req := &runtimev1pb.PauseWorkflowRequest{
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,
@@ -328,30 +337,52 @@ func TestResumeWorkflowApi(t *testing.T) {
 		workflowComponent string
 		instanceID        string
 		expectedError     error
+		status            string
 	}{
 		{
 			testName:          "No instance ID provided in resume request",
 			workflowComponent: fakeComponentName,
 			instanceID:        "",
 			expectedError:     messages.ErrMissingOrEmptyInstance,
+			status:            "RUNNING",
+		},
+		{
+			testName:          "RUNNING status can't be reached in resume request",
+			workflowComponent: fakeComponentName,
+			instanceID:        fakeInstanceID,
+			expectedError:     messages.ErrResumeWorkflow,
+			status:            "FOO",
 		},
 		{
 			testName:          "All is well in resume request",
 			workflowComponent: fakeComponentName,
 			instanceID:        fakeInstanceID,
+			status:            "RUNNING",
 		},
-	}
-
-	// Setup universal dapr API
-	fakeAPI := &Universal{
-		logger:         logger.NewLogger("test"),
-		resiliency:     resiliency.New(nil),
-		workflowEngine: fake.New(),
-		actors:         actorsfake.New(),
 	}
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
+
+			wf := fake.New()
+			wf.WithClient(func() workflows.Workflow {
+				return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+					return &workflows.StateResponse{
+						Workflow: &workflows.WorkflowState{
+							RuntimeStatus: tt.status,
+						},
+					}, nil
+				})
+			})
+
+			// Setup universal dapr API
+			fakeAPI := &Universal{
+				logger:         logger.NewLogger("test"),
+				resiliency:     resiliency.New(nil),
+				workflowEngine: wf,
+				actors:         actorsfake.New(),
+			}
+
 			req := &runtimev1pb.ResumeWorkflowRequest{
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,

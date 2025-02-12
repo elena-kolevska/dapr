@@ -16,6 +16,8 @@ package universal
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 	"unicode"
 
 	"github.com/google/uuid"
@@ -79,15 +81,17 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 		}
 		in.InstanceId = randomID.String()
 	}
+
+	emptyResponse := &runtimev1pb.StartWorkflowResponse{}
 	if err := a.validateInstanceID(in.GetInstanceId(), true /* isCreate */); err != nil {
 		a.logger.Debug(err)
-		return &runtimev1pb.StartWorkflowResponse{}, err
+		return emptyResponse, err
 	}
 
 	if in.GetWorkflowName() == "" {
 		err := messages.ErrWorkflowNameMissing
 		a.logger.Debug(err)
-		return &runtimev1pb.StartWorkflowResponse{}, err
+		return emptyResponse, err
 	}
 
 	req := workflows.StartRequest{
@@ -108,7 +112,12 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 	if err != nil {
 		err := messages.ErrStartWorkflow.WithFormat(in.GetWorkflowName(), err)
 		a.logger.Debug(err)
-		return &runtimev1pb.StartWorkflowResponse{}, err
+		return emptyResponse, err
+	}
+
+	err = a.waitUntilStatusOrTerminal(ctx, resp.InstanceID, "RUNNING")
+	if err != nil {
+		return emptyResponse, fmt.Errorf("failed to wait for workflow to start: %w", err)
 	}
 
 	return &runtimev1pb.StartWorkflowResponse{
@@ -138,6 +147,11 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 			err = messages.ErrTerminateWorkflow.WithFormat(in.GetInstanceId(), err)
 		}
 		a.logger.Debug(err)
+		return emptyResponse, err
+	}
+
+	err := a.waitUntilStatusOrTerminal(ctx, in.GetInstanceId(), "TERMINATED")
+	if err != nil {
 		return emptyResponse, err
 	}
 
@@ -198,6 +212,12 @@ func (a *Universal) PauseWorkflow(ctx context.Context, in *runtimev1pb.PauseWork
 		return emptyResponse, err
 	}
 
+	err := a.waitUntilStatusOrTerminal(ctx, in.GetInstanceId(), "SUSPENDED")
+	if err != nil {
+		err = messages.ErrPauseWorkflow.WithFormat(in.GetInstanceId(), err)
+		a.logger.Debug(err)
+		return emptyResponse, err
+	}
 	return emptyResponse, nil
 }
 
@@ -216,6 +236,13 @@ func (a *Universal) ResumeWorkflow(ctx context.Context, in *runtimev1pb.ResumeWo
 		InstanceID: in.GetInstanceId(),
 	}
 	if err := a.workflowEngine.Client().Resume(ctx, req); err != nil {
+		err = messages.ErrResumeWorkflow.WithFormat(in.GetInstanceId(), err)
+		a.logger.Debug(err)
+		return emptyResponse, err
+	}
+
+	err := a.waitUntilStatusOrTerminal(ctx, in.GetInstanceId(), "RUNNING")
+	if err != nil {
 		err = messages.ErrResumeWorkflow.WithFormat(in.GetInstanceId(), err)
 		a.logger.Debug(err)
 		return emptyResponse, err
@@ -351,4 +378,37 @@ func (a *Universal) validateInstanceID(instanceID string, isCreate bool) error {
 		}
 	}
 	return nil
+}
+
+func (a *Universal) waitUntilStatusOrTerminal(ctx context.Context, instanceID string, targetStatus string) error {
+	getReq := &workflows.GetRequest{
+		InstanceID: instanceID,
+	}
+
+	pollTicker := time.NewTicker(100 * time.Millisecond)
+	timeout := time.NewTicker(10 * time.Second)
+	defer pollTicker.Stop()
+	defer timeout.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timeout.C:
+			return errors.New("workflow did not reach " + targetStatus + " state")
+		case <-pollTicker.C:
+			response, err := a.workflowEngine.Client().Get(ctx, getReq)
+			if err != nil {
+				return err
+			}
+
+			if response.Workflow.RuntimeStatus == targetStatus ||
+				response.Workflow.RuntimeStatus == "COMPLETED" ||
+				response.Workflow.RuntimeStatus == "TERMINATED" ||
+				response.Workflow.RuntimeStatus == "CANCELLED" ||
+				response.Workflow.RuntimeStatus == "FAILED" {
+				return nil
+			}
+		}
+	}
 }
